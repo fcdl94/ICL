@@ -3,14 +3,12 @@ from __future__ import print_function
 import sys
 sys.path.append('.')
 import time
-import numpy as np
 from icarl import utils
 
 import torch
-import torchvision
 import torch.nn as nn
 import copy
-from icarl import networks
+from networks import networks
 import torch.optim as optim
 from icarl.utils import progress_bar
 
@@ -29,8 +27,10 @@ lr_strat = [49, 63]  # Epochs where learning rate gets decreased
 lr_factor = 5.  # Learning rate decrease factor
 wght_decay = 0.00001  # Weight Decay
 nb_runs = 10  # Number of runs (random ordering of classes at each run)
-np.random.seed(1993)  # Fix the random seed
-
+np.random.seed(42)  # Fix the random seed
+ROOT = '/home/fabioc/datasets'
+SIZE = 64
+CHANNELS = 3
 ########################################
 
 device = 'cuda'
@@ -41,7 +41,7 @@ def save_checkpoint(state, filename):
 
 
 # Load the dataset
-icifar = ICIFAR('data',128,10,'fixed_order.npy')
+icifar = ICIFAR(ROOT, 128, 10, 'data/fixed_order.npy')
 
 # Initialization of accuracy lists (3 methods, 10 groups, n_runs) + dictionary=number of training samples per class
 dictionary_size = 500
@@ -57,15 +57,14 @@ for run in range(nb_runs):
     network = networks.CifarResNet().to(device)
     loss = nn.BCEWithLogitsLoss(size_average=True)
 
+    icifar.set_run(run)
+
     lr = lr_old
 
     # --- Initialization of the variables for this run
-    X_valid_cumuls = []
     X_protoset_cumuls = []
-    X_train_cumuls = []
-    Y_valid_cumuls = []
     Y_protoset_cumuls = []
-    Y_train_cumuls = []
+
     acc_cumuls = [[], [], []]
     acc_original = [[], [], []]
     alpha_dr_herding = np.zeros((100 / nb_cl, dictionary_size, nb_cl), np.float32)  # ?
@@ -73,48 +72,27 @@ for run in range(nb_runs):
 
     # The following contains all the training samples of the different classes 
     # because we want to compare our method with the theoretical case where all the training samples are stored
-    prototypes = np.zeros(
-        (100, dictionary_size, X_train_total[0].shape[0], X_train_total[0].shape[1], X_train_total[0].shape[2]),
-        dtype=np.float32)
-    for orde in range(100):
-        prototypes[orde, :, :, :, :] = X_train_total[np.where(Y_train_total == order[orde])]
+    # prototypes = np.zeros(
+    #    (100, dictionary_size, SIZE, SIZE, CHANNELS),
+    #     dtype=np.float32)
+    # for orde in range(100):
+    #     prototy# pes[orde, :, :, :, :] = X_train_total[np.where(Y_train_total == order[orde])]
 
     for iteration in range(100 // nb_cl):
         # Save data results at each increment
         np.save(sys.argv[1] + 'top1_acc_list_cumul_icarl_cl' + str(nb_cl), top1_acc_list_cumul)
         np.save(sys.argv[1] + 'top1_acc_list_ori_icarl_cl' + str(nb_cl), top1_acc_list_ori)
 
-        # Prepare the training data for the current batch of classes
-        actual_cl = order[range(iteration * nb_cl, (iteration + 1) * nb_cl)]
-        indices_train_10 = np.array(
-            # select index i if example i is in actual classes
-            [i in order[range(iteration * nb_cl, (iteration + 1) * nb_cl)] for i in Y_train_total]).reshape(-1)
-        indices_test_10 = np.array(
-            [i in order[range(iteration * nb_cl, (iteration + 1) * nb_cl)] for i in Y_valid_total]).reshape(-1)
-
-        X_train = X_train_total[indices_train_10]
-        X_valid = X_valid_total[indices_test_10]
-        X_valid_cumuls.append(X_valid)
-        X_train_cumuls.append(X_train)
-        X_valid_cumul = np.concatenate(X_valid_cumuls)
-        X_train_cumul = np.concatenate(X_train_cumuls)
-        Y_train = np.array(Y_train_total)[indices_train_10]
-        Y_valid = np.array(Y_valid_total)[indices_test_10]
-        Y_valid_cumuls.append(Y_valid)
-        Y_train_cumuls.append(Y_train)
-        Y_valid_cumul = np.concatenate(Y_valid_cumuls)
-        Y_train_cumul = np.concatenate(Y_train_cumuls)
-
         # Add the stored exemplars to the training data
-        if iteration == 0:
-            X_valid_ori = X_valid
-            Y_valid_ori = Y_valid
-        else:
-            # make the combined training set from exemplar and current samples
+        if iteration > 0:
             X_protoset = np.concatenate(X_protoset_cumuls)
             Y_protoset = np.concatenate(Y_protoset_cumuls)
-            X_train = np.concatenate((X_train, X_protoset), axis=0)
-            Y_train = np.concatenate((Y_train, Y_protoset))
+        else:
+            X_protoset = None
+            Y_protoset = None
+
+        # Prepare the training data for the current batch of classes
+        icifar.next_iteration(X_protoset, Y_protoset)
 
         # Launch the training loop
         new_lr = lr_old
@@ -124,6 +102,7 @@ for run in range(nb_runs):
         print("\n")
         print('Batch of classes number {0} arrives ...'.format(iteration + 1))
         for epoch in range(epochs):
+            ## TRAINING one epoch! ##
 
             print('\nEpoch: %d' % epoch)
             network.train()
@@ -131,37 +110,29 @@ for run in range(nb_runs):
             correct = 0
             total = 0
 
-            # Shuffle training data
-            train_indices = np.arange(len(X_train))
-            np.random.shuffle(train_indices)
-            X_train = X_train[train_indices, :, :, :]
-            Y_train = Y_train[train_indices]
             # In each epoch, we do a full pass over the training data:
             train_err = 0
             train_batches = 0
             start_time = time.time()
             count = 0
-            for batch in utils.iterate_minibatches(X_train, Y_train, batch_size, pixel_means, shuffle=True,
-                                                   augment=True):
+            for inputs, targets_prep in icifar.minibatches(augment=True):
                 # that's like a custom Data Loader
-                count += 1
-                inputs, targets_prep = batch
+                # count += 1
 
-                targets = np.zeros((inputs.shape[0], 100), np.float32)
-                targets[range(len(targets_prep)), targets_prep.astype('int32')] = 1.
-                inputs = torch.tensor(inputs).to(device)
+                targets = np.zeros((inputs.shape[0], 100), np.float32)  # 100 = classes of cifar
+                targets[range(len(targets_prep)), targets_prep.astype('int32')] = 1.  # prepare target for CE loss
 
                 optimizer.zero_grad()
                 outputs = network.forward(inputs)  # feature vector only
-                prediction = network.predict(outputs)  # make the prediction with sigmoid, NCM or other
+                prediction = network.predict(outputs)  # make the prediction with sigmoid, making g_y(xi)
                 targets = torch.tensor(targets).to(outputs.device)
                 targets_prep = torch.LongTensor(targets_prep).to(outputs.device)
 
                 if iteration > 0:  # apply distillation
                     outputs_old = network2.forward(inputs)
                     prediction_old = network2.predict(outputs_old)
-                    targets[:, np.array(order[range(0, iteration * nb_cl)])] = \
-                        F.sigmoid(prediction_old[:, np.array(order[range(0, iteration * nb_cl)])])
+                    targets[:, np.array(icifar.order[range(0, iteration * nb_cl)])] = \
+                        F.sigmoid(prediction_old[:, np.array(icifar.order[range(0, iteration * nb_cl)])])
 
                 loss_bx = loss(prediction, targets)  # joins classification and distillation losses
                 loss_bx.backward()
@@ -171,39 +142,45 @@ for run in range(nb_runs):
                 _, predicted = prediction.max(1)
                 total += targets.size(0)
                 correct += predicted.eq(targets_prep).sum().item()
-                if count % 20 == 0:
-                    print('\n')
-                    progress_bar(count, len(XY_train_total), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
-                                 % (train_loss / (count), 100. * correct / total, correct, total))
+                # if count % 20 == 0:
+                #    print('\n')
+                #    progress_bar(count, len(XY_train_total), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
+                #                 % (train_loss / (count), 100. * correct / total, correct, total))
 
-            train_batches = len(XY_train_total) # non mi e' chiarissimo il senso di questa variabile
+            # train_batches = len(XY_train_total) # non mi e' chiarissimo il senso di questa variabile
+            # END loop minibatches
 
-            # And a full pass over the validation data:
+            ## EVAL after each epoch! ##
 
             network.eval()
             test_loss = 0
             correct = 0
             total = 0
-            count = 0
-            for batch in utils.iterate_minibatches(X_valid, Y_valid, min(500, len(X_valid)), pixel_means,
-                                                   shuffle=False):
-                count += 1
-                inputs, targets_prep = batch
+            # count = 0
+            for inputs, targets_prep in icifar.minibatches(train=False):
+                # count += 1
+
                 targets = np.zeros((inputs.shape[0], 100), np.float32)
                 targets[range(len(targets_prep)), targets_prep.astype('int32')] = 1.
-                inputs = torch.tensor(inputs).to(device)
-                outputs = network.forward(inputs)
-                outputs = network.predict(outputs)
+
+                inputs = inputs.to(device)
+
+                outputs = network.forward(inputs)   # make the embedding
+                outputs = network.predict(outputs)  # make the NCM#
+
                 targets = torch.tensor(targets).to(outputs.device)
                 loss_bx = loss(outputs, targets)
-                targets_prep = torch.LongTensor(targets_prep).to(outputs.device)
                 test_loss += loss_bx.item()
+
+                targets_prep = torch.LongTensor(targets_prep).to(outputs.device)
                 _, predicted = outputs.max(1)
-                total += targets.size(0)
                 correct += predicted.eq(targets_prep).sum().item()
-                if count % 40 == 0:
-                    progress_bar(count, len(XY_valid_total), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
-                                 % (test_loss / (count), 100. * correct / total, correct, total))
+
+                total += targets.size(0)
+
+                # if count % 40 == 0:
+                #     progress_bar(count, len(XY_valid_total), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
+                #                  % (test_loss / (count), 100. * correct / total, correct, total))
 
             acc = 100. * correct / total
 
@@ -214,7 +191,8 @@ for run in range(nb_runs):
                 optimizer = optim.SGD(filter(lambda p: p.requires_grad, network.parameters()), lr=new_lr, momentum=0.9,
                                       weight_decay=wght_decay, nesterov=False)
 
-        # epochs ended for this class-batch
+        ## END OF TRAINING FOR THIS ITERATION ##
+
         # Duplicate current network to distillate info
         network2 = copy.deepcopy(network)
         network2.eval()
@@ -227,7 +205,7 @@ for run in range(nb_runs):
             'optimizer': optimizer.state_dict(),
         }, "iter_" + str(iteration) + "_checkpoint.pth.tar")
 
-        # Update Exemplars
+        ## UPDATE EXEMPLARS ##
         nb_protos_cl = int(np.ceil(nb_protos * 100. / nb_cl / (iteration + 1)))  # num of exemplars per class
         # Herding
         print('Updating exemplar set...')
@@ -235,7 +213,7 @@ for run in range(nb_runs):
         for iter_dico in range(nb_cl):
             # Possible exemplars in the feature space and projected on the L2 sphere
             # exemplars of class iter_dico + nb_cl
-            pinput = torch.tensor(np.array((prototypes[iteration * nb_cl + iter_dico]), dtype=np.float32)).to(device)
+            pinput = torch.tensor(icifar.get_X_of_class([iteration * nb_cl + iter_dico], dtype=np.float32)).to(device)
             mapped_prototypes = network.forward(pinput).cpu().detach().numpy()
             D = mapped_prototypes.T
             D = D / np.linalg.norm(D, axis=0)
@@ -266,10 +244,12 @@ for run in range(nb_runs):
         class_means = np.zeros((64, 100, 2))
 
         for iteration2 in range(iteration + 1):
+
+            current_cl = icifar.order[range(iteration2 * nb_cl, (iteration2 + 1) * nb_cl)]  # take all curr classes
+
             for iter_dico in range(nb_cl):
-                current_cl = order[range(iteration2 * nb_cl, (iteration2 + 1) * nb_cl)]
-                pinput = torch.tensor(np.array((prototypes[iteration2 * nb_cl + iter_dico]), dtype=np.float32)).to(
-                    device)
+                pinput = torch.tensor(icifar.get_X_of_class[iteration2 * nb_cl + iter_dico], dtype=np.float32).to(
+                    device) #take all samples of curr class
 
                 # Collect data in the feature space for each class
                 mapped_prototypes = network.forward(pinput).cpu().detach().numpy()
@@ -277,8 +257,8 @@ for run in range(nb_runs):
                 D = D / np.linalg.norm(D, axis=0)
 
                 # Flipped version also
-                inverted = np.array(prototypes[iteration2 * nb_cl + iter_dico][:, :, :, ::-1])
-                pinput2 = torch.tensor(np.array((inverted - pixel_means), dtype=np.float32)).to(device)
+                inverted = icifar.get_X_of_class[iteration2 * nb_cl + iter_dico][:, :, :, ::-1]
+                pinput2 = torch.tensor(np.array((inverted - icifar.pixel_means), dtype=np.float32)).to(device)
                 mapped_prototypes2 = network.forward(pinput2).cpu().detach().numpy()
                 D2 = mapped_prototypes2.T
                 D2 = D2 / np.linalg.norm(D2, axis=0)
@@ -286,9 +266,12 @@ for run in range(nb_runs):
                 # iCaRL
                 alph = alpha_dr_herding[iteration2, :, iter_dico]
                 alph = (alph > 0) * (alph < nb_protos_cl + 1) * 1.
-                X_protoset_cumuls.append(prototypes[iteration2 * nb_cl + iter_dico, np.where(alph == 1)[0]])
-                Y_protoset_cumuls.append(order[iteration2 * nb_cl + iter_dico] * np.ones(len(np.where(alph == 1)[0])))
+
+                X_protoset_cumuls.append(icifar.get_X_of_class[iteration2 * nb_cl + iter_dico, np.where(alph == 1)[0]])
+                Y_protoset_cumuls.append(icifar.order[iteration2 * nb_cl + iter_dico] * np.ones(len(np.where(alph == 1)[0])))
+
                 alph = alph / np.sum(alph)
+
                 class_means[:, current_cl[iter_dico], 0] = (np.dot(D, alph) + np.dot(D2, alph)) / 2
                 class_means[:, current_cl[iter_dico], 0] /= np.linalg.norm(class_means[:, current_cl[iter_dico], 0])
 
@@ -299,16 +282,15 @@ for run in range(nb_runs):
 
         np.save('cl_means', class_means)
 
-        # Calculate validation error of model on the first nb_cl classes:
-        print('Computing accuracy on the original batch of classes...')
-        top1_acc_list_ori = utils.accuracy_measure(X_valid_ori, Y_valid_ori, pixel_means, class_means, network,
-                                                   top1_acc_list_ori, iteration, iteration_total, 'original')
-        names = ['iCaRL', 'Hybrid', 'NCM']
-
-        # Calculate validation error of model on the cumul of classes:
-        print('Computing cumulative accuracy...')
-        top1_acc_list_cumul = utils.accuracy_measure(X_valid_cumul, Y_valid_cumul, pixel_means, class_means, network,
-                                                     top1_acc_list_cumul, iteration, iteration_total, 'cumul of')
+        ## Calculate validation error of model on the first nb_cl classes:
+        #print('Computing accuracy on the original batch of classes...')
+        #top1_acc_list_ori = utils.accuracy_measure(X_valid_ori,# Y_valid_ori, pixel_means, class_means, network,
+        #                                           top1_acc_list_ori, iteration, iteration_total, 'original')
+#
+        ## Calculate validation error of model on the cumul of classes:
+        #print('Computing cumulative accuracy...')
+        #top1_acc_list_cumul = utils.accuracy_measure(X_valid_cumul, Y_valid_cumul, pixel_means, class_means, network,
+        #                                             top1_acc_list_cumul, iteration, iteration_total, 'cumul of')
 
 # Final save of the data
 np.save(sys.argv[1] + 'top1_acc_list_cumul_icarl_cl' + str(nb_cl), top1_acc_list_cumul)

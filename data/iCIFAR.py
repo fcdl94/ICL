@@ -1,5 +1,6 @@
 import torchvision
 import numpy as np
+import torch
 
 
 class ICIFAR:
@@ -12,6 +13,7 @@ class ICIFAR:
         X_train_total = self.train_dataset.train_data.transpose(0, 3, 1, 2) / np.float32(255)  # shape n,3,32,32
         X_valid_total = self.valid_dataset.test_data.transpose(0, 3, 1, 2) / np.float32(255)
         pixel_means = np.mean(X_train_total, axis=0).reshape(1, 32, 32, 3).transpose(0, 3, 1, 2)
+        self.pixel_means = pixel_means
 
         self.X_train = X_train_total - pixel_means
         self.X_valid = X_valid_total - pixel_means
@@ -48,6 +50,9 @@ class ICIFAR:
         self.X_valid_idx_per_class = self._unpack_data(self.X_valid, self.Y_valid, 100)
         # reset iteration counter
         self.iteration = 0
+
+    def get_X_of_class(self, idx):
+        return self.X_train[self.X_train_idx_per_class[idx]]
 
     def _unpack_data(self, x, y, size):
         x_ = np.zeros(
@@ -95,6 +100,11 @@ class ICIFAR:
         self.X_train_to_iter = self.X_train_to_iter[train_indices, :, :, :]
         self.y_train_to_iter = self.y_train_to_iter[train_indices]
 
+        self.X_train_to_iter = torch.tensor(self.X_train_to_iter)
+        self.y_train_to_iter = torch.tensor(self.y_train_to_iter)
+        self.X_valid_to_iter = torch.tensor(self.X_valid_to_iter)
+        self.y_valid_to_iter = torch.tensor(self.y_valid_to_iter)
+
         return self.X_train_to_iter, self.y_train_to_iter, self.X_valid_to_iter, self.y_valid_to_iter
 
     # sarebbe piu' comodo farne un dataloader custom
@@ -112,6 +122,7 @@ class ICIFAR:
                 # as in paper : 
                 # pad feature arrays with 4 pixels on each side
                 # and do random cropping of 32x32
+                X = X.numpy()
                 padded = np.pad(X[excerpt], ((0, 0), (0, 0), (4, 4), (4, 4)), mode='constant')
                 random_cropped = np.zeros(X[excerpt].shape, dtype=np.float32)
                 crops = np.random.random_integers(0, high=8, size=(self.batch_size, 2))
@@ -123,7 +134,7 @@ class ICIFAR:
                     else:
                         random_cropped[r, :, :, :] = padded[r, :, crops[r, 0]:(crops[r, 0] + 32),
                                                      crops[r, 1]:(crops[r, 1] + 32)][:, :, ::-1]
-                inp_exc = random_cropped
+                inp_exc = torch.tensor(random_cropped)
             else:
                 inp_exc = X[excerpt]
 

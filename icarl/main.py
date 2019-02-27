@@ -10,7 +10,7 @@ import torch
 import torchvision
 import torch.nn as nn
 import copy
-from icarl import networks
+from networks import networks
 import torch.optim as optim
 from icarl.utils import progress_bar
 
@@ -280,8 +280,9 @@ for iteration_total in range(nb_runs):
         class_means = np.zeros((64, 100, 2))
 
         for iteration2 in range(iteration + 1):
+            current_cl = order[range(iteration2 * nb_cl, (iteration2 + 1) * nb_cl)]
             for iter_dico in range(nb_cl):
-                current_cl = order[range(iteration2 * nb_cl, (iteration2 + 1) * nb_cl)]
+
                 pinput = torch.tensor(np.array((prototypes[iteration2 * nb_cl + iter_dico]), dtype=np.float32)).to(
                     device)
 
