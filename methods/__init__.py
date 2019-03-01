@@ -1,8 +1,8 @@
-methods_names = {
-    'ICarl': '.icarl'}
+from .icarl import ICarl
 
 
-def get_method(name):
-    module = __import__(methods_names[name])
-    method_class = getattr(module, name)
-    return method_class
+def get_dataset(name):
+    if name.lower() == 'ICarl'.lower():
+        return ICarl
+
+    assert True, f"There is no methods called {name}."

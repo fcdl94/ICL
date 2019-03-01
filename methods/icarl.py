@@ -307,7 +307,6 @@ class ICarl:
                 # dot operation is for weighting each f(xi) with alpha
                 class_means[:, cl, 1] /= np.linalg.norm(class_means[:, cl, 1])
 
-        np.save('cl_means', class_means)
         return class_means
 
     def test(self, iteration, class_means=None):
