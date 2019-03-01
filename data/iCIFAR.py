@@ -1,11 +1,13 @@
 import torchvision
 import numpy as np
 import torch
+from .abstract_dataset import IAbstractDataset
 
 
-class ICIFAR:
+class ICIFAR(IAbstractDataset):
 
-    def __init__(self, root, batch_size, nc_per_iter, order_file, download=False, run_number=0):
+    def __init__(self, root, batch_size, nc_per_iter, order_file, download=True, run_number=0):
+        super().__init__()
         # Load the dataset
         self.train_dataset = torchvision.datasets.CIFAR100(root=root, train=True, download=download)
         self.valid_dataset = torchvision.datasets.CIFAR100(root=root, train=False, download=download)
@@ -25,8 +27,7 @@ class ICIFAR:
 
         # Init parameters that will really be initialized in set_run
         self.iteration = 0
-        self.run = 0
-        self.order = None
+        self.run = -1
         self.X_train_idx_per_class = None
         self.X_valid_idx_per_class = None
         self.set_run(run_number)
@@ -42,6 +43,14 @@ class ICIFAR:
         self.X_valid_to_iter = None
         self.y_valid_to_iter = None
 
+    @property
+    def order(self):
+        return self.__order
+
+    @order.setter
+    def order(self, order):
+        self.__order = order
+
     def set_run(self, run):
         self.run = run
         self.order = self.full_order[run]
@@ -52,7 +61,7 @@ class ICIFAR:
         self.iteration = 0
 
     def get_X_of_class(self, idx):
-        return self.X_train[self.X_train_idx_per_class[idx]]
+        return self.X_train[np.where(self.Y_train == idx)[0]]
 
     def _unpack_data(self, x, y, size):
         x_ = np.zeros(
@@ -74,6 +83,9 @@ class ICIFAR:
         :param iteration:  Selection for the iteration
         :return: X_train, y_train, X_valid, y_valid
         '''
+
+        assert self.run >= 0, "You have not set up the run. Call set_run() before using this function."
+
         if iteration:
             self.iteration = iteration
         else:
@@ -89,7 +101,7 @@ class ICIFAR:
         self.X_valid_to_iter = self.X_valid[valid_idx]
         self.y_valid_to_iter = self.Y_valid[valid_idx]
 
-        if X_protoset and y_protoset:
+        if X_protoset is not None and y_protoset is not None:
             # make the combined training set from exemplar and current samples
             self.X_train_to_iter = np.concatenate((self.X_train_to_iter, X_protoset), axis=0)
             self.y_train_to_iter = np.concatenate((self.y_train_to_iter, y_protoset))
@@ -116,13 +128,14 @@ class ICIFAR:
             X = self.X_valid_to_iter
             y = self.y_valid_to_iter
 
+        X = X.numpy()
+
         for start_idx in range(0, len(y) - self.batch_size + 1, self.batch_size):
             excerpt = slice(start_idx, start_idx + self.batch_size)
             if augment:
                 # as in paper : 
                 # pad feature arrays with 4 pixels on each side
                 # and do random cropping of 32x32
-                X = X.numpy()
                 padded = np.pad(X[excerpt], ((0, 0), (0, 0), (4, 4), (4, 4)), mode='constant')
                 random_cropped = np.zeros(X[excerpt].shape, dtype=np.float32)
                 crops = np.random.random_integers(0, high=8, size=(self.batch_size, 2))
@@ -134,8 +147,23 @@ class ICIFAR:
                     else:
                         random_cropped[r, :, :, :] = padded[r, :, crops[r, 0]:(crops[r, 0] + 32),
                                                      crops[r, 1]:(crops[r, 1] + 32)][:, :, ::-1]
-                inp_exc = torch.tensor(random_cropped)
+                inp_exc = random_cropped
             else:
                 inp_exc = X[excerpt]
 
-            yield np.array(inp_exc, dtype=np.float32), y[excerpt]
+            yield torch.tensor(inp_exc), y[excerpt]
+
+    def minibatches_for_test(self, iteration, batch_size=None):
+
+        if batch_size is None:
+            batch_size = self.batch_size
+
+        valid_idx = np.concatenate(
+            self.X_valid_idx_per_class[0 : iteration * self.nb_cl])
+        X = self.X_valid[valid_idx]
+        y = self.Y_valid[valid_idx]
+
+        for start_idx in range(0, len(y) - batch_size + 1, batch_size):
+            excerpt = slice(start_idx, start_idx + batch_size)
+
+            yield torch.tensor(X[excerpt]), torch.tensor(y[excerpt])

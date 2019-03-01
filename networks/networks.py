@@ -9,7 +9,7 @@ Reference:
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import ncm_layer
+from .ncm_layer import incremental_NCM_classifier
 import math
 
 from torch.nn import init
@@ -358,7 +358,7 @@ class ResNet_iNCM(nn.Module):
         self.layer2 = self._make_layer(block, 128, num_blocks[1], stride=2)
         self.layer3 = self._make_layer(block, 256, num_blocks[2], stride=2)
         self.layer4 = self._make_layer(block, 512, num_blocks[3], stride=2)
-        self.linear = icarl.ncm_layer.incremental_NCM_classifier(512 * block.expansion, num_classes)
+        self.linear = incremental_NCM_classifier(512 * block.expansion, num_classes)
 
     def _make_layer(self, block, planes, num_blocks, stride):
         strides = [stride] + [1] * (num_blocks - 1)
