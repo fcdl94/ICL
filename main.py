@@ -12,7 +12,7 @@ batch_size = 128  # Batch size
 n = 5  # Set the depth of the architecture: n = 5 -> 32 layers (See He et al. paper)
 nb_cl = 10  # Classes per group
 nb_runs = 10  # Number of runs (random ordering of classes at each run)
-DATA_ROOT = "/home/fabioc/dataset"
+DATA_ROOT = "/home/fcdl/dataset"
 #
 
 # get the data
