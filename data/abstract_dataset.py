@@ -7,15 +7,13 @@ class IAbstractDataset(ABC):
         super().__init__()
         self.order = None
 
-    @abstractmethod
     @property
     def order(self):
-        pass
+        raise NotImplementedError
 
-    @abstractmethod
     @order.setter
     def order(self, order):
-        pass
+        raise NotImplementedError
 
     @abstractmethod
     def get_X_of_class(self, idx):
