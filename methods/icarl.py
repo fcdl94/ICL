@@ -4,20 +4,24 @@ import torch.nn as nn
 import torch.optim as optim
 import numpy as np
 import copy
+from datetime import datetime
 from scipy.spatial.distance import cdist
 
-LR = 0.01
+LR = 2.
 MEM_SIZE = 20*100
 DECAY = 0.00001
 EPOCHS = 70
 LR_FACTOR = 5.
 
+DEVICE = 'cpu'
+if torch.cuda.is_available():
+    DEVICE = 'cuda'
+
 
 class ICarl:
 
-    def __init__(self, network, n_classes=100, dictionary_size=100, mem_size=MEM_SIZE,
-                 lr_init=LR, decay=DECAY, epochs=EPOCHS,
-                 device='cuda'):
+    def __init__(self, network, n_classes=100, dictionary_size=500, mem_size=MEM_SIZE,
+                 lr_init=LR, decay=DECAY, epochs=EPOCHS, device=DEVICE):
         """
         :param network: the backbone neural network of the model
         :param n_classes: Number of classes of the dataset
@@ -43,23 +47,35 @@ class ICarl:
         self.dictionary_size = dictionary_size
         self.decay = decay
         self.epochs = epochs
-        self.lr_strat = [epochs//7, epochs//9]
+        self.lr_strat = [round(epochs*0.7), round(epochs*0.9)]
         self.lr_factor = LR_FACTOR
 
         self.prototypes = None
 
         self.alpha_dr_herding = np.zeros((n_classes, dictionary_size), np.float32)
 
-    def fit(self, dataset, nb_cl):
-        self.alpha_dr_herding = np.zeros((self.n_classes, self.dictionary_size), np.float32)
+    def fit(self, dataset, nb_cl, checkpoint=None):
 
+        self.alpha_dr_herding = np.zeros((self.n_classes, self.dictionary_size), np.float32)
         self.dataset = dataset
         self.nb_cl = nb_cl
 
         x_protoset_cumuls = []
         y_protoset_cumuls = []
 
-        for iteration in range(self.n_classes // nb_cl):
+        cumulative_accuracies = []
+
+        start_iter = 0
+
+        if checkpoint is not None:
+            check_dict = torch.load(checkpoint)
+            start_iter = check_dict['iteration']
+            self.network.load_state_dict(check_dict['network'])
+            self.network2.load_state_dict(check_dict['network2'])
+            x_protoset_cumuls = check_dict['X']
+            y_protoset_cumuls = check_dict['Y']
+
+        for iteration in range(start_iter, self.n_classes // nb_cl):
             # Add the stored exemplars to the training data
             if iteration > 0:
                 x_protoset = np.concatenate(x_protoset_cumuls)
@@ -76,18 +92,22 @@ class ICarl:
 
             self.incremental_fit(iteration)  # train for N epochs (after each epoch validate)
 
-            # Save the network
-            torch.save({
-                'iteration': iteration,
-                'state_dict': self.network.state_dict()
-            }, "iter_" + str(iteration) + "_checkpoint.pth.tar")
             # END OF TRAINING FOR THIS ITERATION #
 
             # UPDATE EXEMPLARS #
             print('Updating exemplar set...')
             x_protoset_cumuls, y_protoset_cumuls = self.update_exemplars(iteration)
 
-            ## COMPUTE ACCURACY ##
+            # Save training checkpoint
+            torch.save({
+                'iteration': iteration,
+                'network': self.network.state_dict(),
+                'network2': self.network2.state_dict(),
+                'X': x_protoset_cumuls,
+                'Y': y_protoset_cumuls
+            }, "checkpoint/iter_" + str(iteration) + "_checkpoint.pth.tar")
+
+            # COMPUTE ACCURACY ##
             acc_cum = self.test(iteration + 1)
 
             print("Cumulative results")
@@ -102,7 +122,19 @@ class ICarl:
             print("  top 1 accuracy Hybrid 1       :\t{:.2f} %".format(acc_base[1]))
             print("  top 1 accuracy NCM            :\t{:.2f} %".format(acc_base[2]))
 
+            cumulative_accuracies.append(acc_cum)
+
             print("")
+
+        torch.save(
+            {
+             "network": self.network.state_dict(),
+             "accuracy": cumulative_accuracies
+             },
+            f"icarl{datetime.now().isoformat()}.pth"
+        )
+
+        return cumulative_accuracies
 
     def incremental_fit(self, iteration):
         new_lr = self.lr_init
@@ -172,10 +204,10 @@ class ICarl:
                 total += targets.size(0)
 
             acc = 100. * correct / total
-            if (epoch + 1) % 7 == 0:
-                print(f"Epoch {epoch + 1} : Loss {test_loss / total:.8f} - Accuracy {acc:.2f}")
 
-                # adjust learning rate
+            print(f"Epoch {epoch + 1} : Loss {test_loss / total:.8f} - Accuracy {acc:.2f}")
+
+            # adjust learning rate
             if (epoch + 1) in self.lr_strat:
                 new_lr = new_lr / self.lr_factor
                 print("New LR:" + str(new_lr))
