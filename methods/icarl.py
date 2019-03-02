@@ -114,6 +114,7 @@ class ICarl:
             print("  top 1 accuracy iCaRL          :\t{:.2f} %".format(acc_cum[0]))
             print("  top 1 accuracy Hybrid 1       :\t{:.2f} %".format(acc_cum[1]))
             print("  top 1 accuracy NCM            :\t{:.2f} %".format(acc_cum[2]))
+            print("  top 1 accuracy INV            :\t{:.2f} %".format(acc_cum[3]))
 
             acc_base = self.test(1)
 
@@ -121,6 +122,7 @@ class ICarl:
             print("  top 1 accuracy iCaRL          :\t{:.2f} %".format(acc_base[0]))
             print("  top 1 accuracy Hybrid 1       :\t{:.2f} %".format(acc_base[1]))
             print("  top 1 accuracy NCM            :\t{:.2f} %".format(acc_base[2]))
+            print("  top 1 accuracy INV            :\t{:.2f} %".format(acc_base[3]))
 
             cumulative_accuracies.append(acc_cum)
 
@@ -286,11 +288,11 @@ class ICarl:
                 D = D / np.linalg.norm(D, axis=0)
 
                 # Flipped version also # Check performance, se uguali levalo
-                # inverted = np.array(self.dataset.get_X_of_class(cl)[:, :, :, ::-1])
-                # pinput2 = tensor(np.array((inverted - self.dataset.pixel_means), dtype=np.float32)).to(self.device)
-                # mapped_prototypes2 = self.network.forward(pinput2).cpu().detach().numpy()
-                # D2 = mapped_prototypes2.T
-                # D2 = D2 / np.linalg.norm(D2, axis=0)
+                inverted = np.array(self.dataset.get_X_of_class(cl)[:, :, :, ::-1])
+                pinput2 = tensor(np.array((inverted - self.dataset.pixel_means), dtype=np.float32)).to(self.device)
+                mapped_prototypes2 = self.network.forward(pinput2).cpu().detach().numpy()
+                D2 = mapped_prototypes2.T
+                D2 = D2 / np.linalg.norm(D2, axis=0)
 
                 # iCaRL
                 alph = self.alpha_dr_herding[cl, :]  # importance of each image of this class
@@ -300,6 +302,11 @@ class ICarl:
                 class_means[:, cl, 0] = (np.dot(D, alph))  # + np.dot(D2, alph)) / 2
                 # dot operation is for weighting each f(xi) with alpha
                 class_means[:, cl, 0] /= np.linalg.norm(class_means[:, cl, 0])
+
+                # ICarl + flipped
+                class_means[:, cl, 2] = (np.dot(D, alph) + np.dot(D2, alph)) / 2
+                # dot operation is for weighting each f(xi) with alpha
+                class_means[:, cl, 2] /= np.linalg.norm(class_means[:, cl, 0])
 
                 # Normal NCM
                 alph = np.ones(self.dictionary_size) / self.dictionary_size  # to make the avg over all samples
@@ -314,10 +321,11 @@ class ICarl:
         if class_means is None:
             class_means = self.compute_means(iteration)
 
-        top1_acc_list = np.zeros(3)
+        top1_acc_list = np.zeros(4)
 
         stat_hb1 = []
         stat_icarl = []
+        stat_icarl_inv = []
         stat_ncm = []
 
         for inputs, targets_prep in self.dataset.minibatches_for_test(iteration):
@@ -333,6 +341,9 @@ class ICarl:
             # Compute score for iCaRL
             sqd = cdist(class_means[:, :, 0].T, outputs, 'sqeuclidean')  # Squared euclidean distance
             score_icarl = (-sqd).T
+            # Compute score for iCaRL-INV
+            sqd = cdist(class_means[:, :, 2].T, outputs, 'sqeuclidean')  # Squared euclidean distance
+            score_icarl_inv = (-sqd).T
             # Compute score for NCM
             sqd = cdist(class_means[:, :, 1].T, outputs, 'sqeuclidean')  # Squared euclidean distance
             score_ncm = (-sqd).T
@@ -342,10 +353,12 @@ class ICarl:
 
             stat_hb1 += ([ll in best for ll, best in zip(targets_prep, np.argsort(pred, axis=1)[:, -1:])])
             stat_icarl += ([ll in best for ll, best in zip(targets_prep, np.argsort(score_icarl, axis=1)[:, -1:])])
+            stat_icarl_inv += ([ll in best for ll, best in zip(targets_prep, np.argsort(score_icarl_inv, axis=1)[:, -1:])])
             stat_ncm += ([ll in best for ll, best in zip(targets_prep, np.argsort(score_ncm, axis=1)[:, -1:])])
 
         top1_acc_list[0] = np.average(stat_icarl) * 100  # ICarl
         top1_acc_list[1] = np.average(stat_hb1) * 100  # Hybrid 1
         top1_acc_list[2] = np.average(stat_ncm) * 100  # NCM
+        top1_acc_list[3] = np.average(stat_icarl_inv) * 100  # NCM
 
         return top1_acc_list
