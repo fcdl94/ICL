@@ -131,7 +131,7 @@ class ICarl:
              "network": self.network.state_dict(),
              "accuracy": cumulative_accuracies
              },
-            f"icarl{datetime.now().isoformat()}.pth"
+            f"models/icarl{datetime.now().isoformat()}.pth"
         )
 
         return cumulative_accuracies
