@@ -79,7 +79,7 @@ class ICarl:
 
         for iteration in range(start_iter, self.n_classes // nb_cl):
             # Add the stored exemplars to the training data
-            if iteration > 0:
+            if iteration > 0 and len(x_protoset_cumuls) > 0:
                 x_protoset = np.concatenate(x_protoset_cumuls)
                 y_protoset = np.concatenate(y_protoset_cumuls)
             else:
@@ -227,49 +227,51 @@ class ICarl:
         # Herding
         self.network.eval()
 
-        for iter_dico in range(self.nb_cl):
-            cl = self.dataset.order[iteration * self.nb_cl + iter_dico]
-
-            # Possible exemplars in the feature space and projected on the L2 sphere
-            # exemplars of class iter_dico + nb_cl
-            pinput = tensor(self.dataset.get_X_of_class(cl)).to(self.device)
-            mapped_prototypes = self.network.forward(pinput).cpu().detach().numpy()
-            D = mapped_prototypes.T
-            D = D / np.linalg.norm(D, axis=0)
-            # Herding procedure : ranking of the potential exemplars
-            mu = np.mean(D, axis=1)
-
-            # set exemplar to zero
-            self.alpha_dr_herding[cl, :] = self.alpha_dr_herding[cl, :] * 0
-            w_t = mu
-            iter_herding = 0
-            iter_herding_eff = 0
-            # Herding algorithm
-            while not (np.sum(self.alpha_dr_herding[cl, :] != 0) == min(nb_protos_cl, 500)) and iter_herding_eff < 1000:
-                tmp_t = np.dot(w_t, D)
-                ind_max = np.argmax(tmp_t)
-                iter_herding_eff += 1
-                if self.alpha_dr_herding[cl, ind_max] == 0:
-                    self.alpha_dr_herding[cl, ind_max] = 1 + iter_herding
-                    iter_herding += 1
-                w_t = w_t + mu - D[:, ind_max]
-
         # Prepare the protoset
         X_protoset_cumuls = []
         Y_protoset_cumuls = []
 
-        # Storing the selected exemplars in the protoset
-        for iteration2 in range(iteration + 1):
+        if nb_protos_cl > 0:
 
             for iter_dico in range(self.nb_cl):
-                cl = self.dataset.order[iteration2 * self.nb_cl + iter_dico]
+                cl = self.dataset.order[iteration * self.nb_cl + iter_dico]
 
-                alph = self.alpha_dr_herding[cl, :]  # select the herd of the current class
-                alph = (alph > 0) * (alph < nb_protos_cl + 1) * 1.  # put one in the ones to select
+                # Possible exemplars in the feature space and projected on the L2 sphere
+                # exemplars of class iter_dico + nb_cl
+                pinput = tensor(self.dataset.get_X_of_class(cl)).to(self.device)
+                mapped_prototypes = self.network.forward(pinput).cpu().detach().numpy()
+                D = mapped_prototypes.T
+                D = D / np.linalg.norm(D, axis=0)
+                # Herding procedure : ranking of the potential exemplars
+                mu = np.mean(D, axis=1)
 
-                # append exeplars in the protoset
-                X_protoset_cumuls.append(self.dataset.get_X_of_class(cl)[np.where(alph == 1)[0]])
-                Y_protoset_cumuls.append(cl * np.ones(len(np.where(alph == 1)[0]), dtype=np.int32))
+                # set exemplar to zero
+                self.alpha_dr_herding[cl, :] = self.alpha_dr_herding[cl, :] * 0
+                w_t = mu
+                iter_herding = 0
+                iter_herding_eff = 0
+                # Herding algorithm
+                while not (np.sum(self.alpha_dr_herding[cl, :] != 0) == min(nb_protos_cl, 500)) and iter_herding_eff < 1000:
+                    tmp_t = np.dot(w_t, D)
+                    ind_max = np.argmax(tmp_t)
+                    iter_herding_eff += 1
+                    if self.alpha_dr_herding[cl, ind_max] == 0:
+                        self.alpha_dr_herding[cl, ind_max] = 1 + iter_herding
+                        iter_herding += 1
+                    w_t = w_t + mu - D[:, ind_max]
+
+            # Storing the selected exemplars in the protoset
+            for iteration2 in range(iteration + 1):
+
+                for iter_dico in range(self.nb_cl):
+                    cl = self.dataset.order[iteration2 * self.nb_cl + iter_dico]
+
+                    alph = self.alpha_dr_herding[cl, :]  # select the herd of the current class
+                    alph = (alph > 0) * (alph < nb_protos_cl + 1) * 1.  # put one in the ones to select
+
+                    # append exeplars in the protoset
+                    X_protoset_cumuls.append(self.dataset.get_X_of_class(cl)[np.where(alph == 1)[0]])
+                    Y_protoset_cumuls.append(cl * np.ones(len(np.where(alph == 1)[0]), dtype=np.int32))
 
         return X_protoset_cumuls, Y_protoset_cumuls
 
@@ -300,7 +302,12 @@ class ICarl:
                 alph = self.alpha_dr_herding[cl, :]  # importance of each image of this class
                 alph = (alph > 0) * (alph < nb_protos_cl + 1) * 1.  # 1 if in the current herd
 
-                alph = alph / np.sum(alph)  # to make the average only for the current prototypes.
+                # Handle the case in which there are no prototypes
+                s = np.sum(alph)
+                if s == 0:
+                    s = 1
+
+                alph = alph / s  # to make the average only for the current prototypes.
                 class_means[:, cl, 0] = (np.dot(D, alph))  # + np.dot(D2, alph)) / 2
                 # dot operation is for weighting each f(xi) with alpha
                 class_means[:, cl, 0] /= np.linalg.norm(class_means[:, cl, 0])
@@ -320,7 +327,7 @@ class ICarl:
 
     def test(self, iteration, class_means=None):
 
-        if class_means is None:
+        if class_means is None and self.mem_size > 0:
             class_means = self.compute_means(iteration)
 
         top1_acc_list = np.zeros(4)
@@ -335,33 +342,38 @@ class ICarl:
 
             # compute prediction
             outputs = self.network.forward(inputs)  # returns embeddings
-            pred = self.network.predict(outputs).cpu().detach().numpy()  # return classes of Hybrid1
+            pred = self.network.predict(outputs).cpu().detach().numpy()  # return score classes as logits
             outputs = outputs.cpu().detach().numpy()
 
             outputs = (outputs.T / np.linalg.norm(outputs.T, axis=0)).T  # normalize output
 
-            # Compute score for iCaRL
-            sqd = cdist(class_means[:, :, 0].T, outputs, 'sqeuclidean')  # Squared euclidean distance
-            score_icarl = (-sqd).T
-            # Compute score for iCaRL-INV
-            sqd = cdist(class_means[:, :, 2].T, outputs, 'sqeuclidean')  # Squared euclidean distance
-            score_icarl_inv = (-sqd).T
-            # Compute score for NCM
-            sqd = cdist(class_means[:, :, 1].T, outputs, 'sqeuclidean')  # Squared euclidean distance
-            score_ncm = (-sqd).T
-
             # Compute the accuracy over the batch
             targets_prep = targets_prep.numpy()
 
-            stat_hb1 += ([ll in best for ll, best in zip(targets_prep, np.argsort(pred, axis=1)[:, -1:])])
-            stat_icarl += ([ll in best for ll, best in zip(targets_prep, np.argsort(score_icarl, axis=1)[:, -1:])])
-            stat_icarl_inv += ([ll in best for ll, best in zip(targets_prep, np.argsort(score_icarl_inv, axis=1)[:, -1:])])
-            stat_ncm += ([ll in best for ll, best in zip(targets_prep, np.argsort(score_ncm, axis=1)[:, -1:])])
+            if self.mem_size > 0:
+                # Compute score for iCaRL
+                sqd = cdist(class_means[:, :, 0].T, outputs, 'sqeuclidean')  # Squared euclidean distance
+                score_icarl = (-sqd).T
+                # Compute score for iCaRL-INV
+                sqd = cdist(class_means[:, :, 2].T, outputs, 'sqeuclidean')  # Squared euclidean distance
+                score_icarl_inv = (-sqd).T
+                # Compute score for NCM
+                sqd = cdist(class_means[:, :, 1].T, outputs, 'sqeuclidean')  # Squared euclidean distance
+                score_ncm = (-sqd).T
 
-        top1_acc_list[0] = np.average(stat_icarl) * 100  # ICarl
+                stat_icarl += ([ll in best for ll, best in zip(targets_prep, np.argsort(score_icarl, axis=1)[:, -1:])])
+                stat_icarl_inv += ([ll in best for ll, best in zip(targets_prep, np.argsort(score_icarl_inv, axis=1)[:, -1:])])
+                stat_ncm += ([ll in best for ll, best in zip(targets_prep, np.argsort(score_ncm, axis=1)[:, -1:])])
+
+            stat_hb1 += ([ll in best for ll, best in zip(targets_prep, np.argsort(pred, axis=1)[:, -1:])])
+            # use the logits
+
+        if self.mem_size > 0:
+            top1_acc_list[0] = np.average(stat_icarl) * 100  # ICarl
+            top1_acc_list[2] = np.average(stat_ncm) * 100  # NCM
+            top1_acc_list[3] = np.average(stat_icarl_inv) * 100  # NCM
+
         top1_acc_list[1] = np.average(stat_hb1) * 100  # Hybrid 1
-        top1_acc_list[2] = np.average(stat_ncm) * 100  # NCM
-        top1_acc_list[3] = np.average(stat_icarl_inv) * 100  # NCM
 
         return top1_acc_list
 

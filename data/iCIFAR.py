@@ -4,11 +4,15 @@ import torch
 from .abstract_dataset import IAbstractDataset
 import os
 
+
 class ICIFAR(IAbstractDataset):
+
+    # TODO remove dependencies on implementation of PyTorch (direct download the dataset or use the interface
 
     def __init__(self, root, batch_size, nc_per_iter, order_file=None, download=True, run_number=0):
         super().__init__()
         # Load the dataset
+
         self.train_dataset = torchvision.datasets.CIFAR100(root=root, train=True, download=download)
         self.valid_dataset = torchvision.datasets.CIFAR100(root=root, train=False, download=download)
         # normalize data
