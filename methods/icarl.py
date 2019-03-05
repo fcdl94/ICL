@@ -54,11 +54,13 @@ class ICarl:
 
         self.alpha_dr_herding = np.zeros((n_classes, dictionary_size), np.float32)
 
-    def fit(self, dataset, nb_cl, checkpoint=None):
+    def fit(self, dataset, nb_cl, checkpoint=None, epochs=None):
 
         self.alpha_dr_herding = np.zeros((self.n_classes, self.dictionary_size), np.float32)
         self.dataset = dataset
         self.nb_cl = nb_cl
+        if epochs is not None:
+            self.epochs = epochs
 
         x_protoset_cumuls = []
         y_protoset_cumuls = []
@@ -362,3 +364,26 @@ class ICarl:
         top1_acc_list[3] = np.average(stat_icarl_inv) * 100  # NCM
 
         return top1_acc_list
+
+    def predict(self, inputs, method=0):
+        '''
+        :return the predicted class for the inputs as tensor in cpu
+
+        :param inputs: tensors to be evaluated
+        :param method: 0 (def) is ICaRL, 1 is NCM, 2 is ICaRL-inv, 3 is with sigmoid
+        '''
+        class_means = self.compute_means(self.n_classes // self.nb_cl)
+        outputs = self.network.forward(inputs)  # returns embeddings
+        if method == 3:
+            pred = self.network.predict(outputs).cpu().detach()
+        elif 0 <= method < 3:
+            outputs = outputs.cpu().detach().numpy()
+            outputs = (outputs.T / np.linalg.norm(outputs.T, axis=0)).T  # normalize output
+            sqd = cdist(class_means[:, :, method].T, outputs, 'sqeuclidean')  # Squared euclidean distance
+            score = (-sqd).T
+            pred = np.argsort(score, axis=1)[:, -1:]
+            pred = torch.tensor(pred)
+        else:
+            raise Exception("Pass method between 0 and 3 inclusive")
+
+        return pred

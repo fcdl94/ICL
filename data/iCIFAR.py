@@ -2,11 +2,11 @@ import torchvision
 import numpy as np
 import torch
 from .abstract_dataset import IAbstractDataset
-
+import os
 
 class ICIFAR(IAbstractDataset):
 
-    def __init__(self, root, batch_size, nc_per_iter, order_file, download=True, run_number=0):
+    def __init__(self, root, batch_size, nc_per_iter, order_file=None, download=True, run_number=0):
         super().__init__()
         # Load the dataset
         self.train_dataset = torchvision.datasets.CIFAR100(root=root, train=True, download=download)
@@ -23,6 +23,8 @@ class ICIFAR(IAbstractDataset):
         self.Y_train = np.array(self.train_dataset.train_labels)
 
         # get the order for incremental cifar
+        if order_file is None:
+            order_file = os.path.join(root, 'fixed_order.npy')
         self.full_order = np.load(order_file)
 
         # Init parameters that will really be initialized in set_run
