@@ -17,6 +17,8 @@ class IAbstractDataset(ABC):
 
     @abstractmethod
     def get_X_of_class(self, idx):
+        # questa funzione non mi piace, dovremmo pensare di sostituirla (serve solo ad ICaRL per tenere prototipi)
+        # ICaRL dovrebbe gestirsi il suo meccanismo di memoria che stora le immagini quando gli arrivano
         pass
 
     @abstractmethod

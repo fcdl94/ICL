@@ -38,7 +38,7 @@ dataset_name = args.dataset
 # now start with the main
 
 # get the data
-dataset = data.get_dataset(dataset_name)(DATA_ROOT, batch_size, nb_cl, 'data/fixed_order.npy')
+dataset = data.get_dataset(dataset_name)(DATA_ROOT, batch_size, nb_cl, 'data/cifar_order.npy')
 accuracies = []
 
 for run in range(nb_runs):

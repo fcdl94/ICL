@@ -8,6 +8,7 @@ import os
 class ICIFAR(IAbstractDataset):
 
     # TODO remove dependencies on implementation of PyTorch (direct download the dataset or use the interface
+    # TODO to update to PyTorch version 1.0.1 (torchvision 0.2.2)
 
     def __init__(self, root, batch_size, nc_per_iter, order_file=None, download=True, run_number=0):
         super().__init__()
@@ -28,7 +29,7 @@ class ICIFAR(IAbstractDataset):
 
         # get the order for incremental cifar
         if order_file is None:
-            order_file = os.path.join(root, 'fixed_order.npy')
+            order_file = os.path.join(root, 'cifar_order.npy')
         self.full_order = np.load(order_file)
 
         # Init parameters that will really be initialized in set_run
@@ -61,17 +62,16 @@ class ICIFAR(IAbstractDataset):
         self.run = run
         self.order = self.full_order[run]
 
-        self.X_train_idx_per_class = self._unpack_data(self.X_train, self.Y_train, 500)
-        self.X_valid_idx_per_class = self._unpack_data(self.X_valid, self.Y_valid, 100)
+        self.X_train_idx_per_class = self.__unpack_data(self.X_train, self.Y_train, 500)
+        self.X_valid_idx_per_class = self.__unpack_data(self.X_valid, self.Y_valid, 100)
         # reset iteration counter
         self.iteration = 0
 
     def get_X_of_class(self, idx):
         return self.X_train[np.where(self.Y_train == idx)[0]]
 
-    def _unpack_data(self, x, y, size):
-        x_ = np.zeros(
-            (100, size), dtype=np.float32)
+    def __unpack_data(self, x, y, size):
+        x_ = np.zeros((100, size), dtype=np.float32)
         for i in range(100):
             x_[i, :] = np.where(y == self.order[i])[0]
         return x_.astype(int)
