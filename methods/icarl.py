@@ -20,7 +20,7 @@ if torch.cuda.is_available():
 
 class ICarl:
 
-    def __init__(self, network, n_classes=100, dictionary_size=500, mem_size=MEM_SIZE,
+    def __init__(self, network, n_classes=100, mem_size=MEM_SIZE,
                  lr_init=LR, decay=DECAY, epochs=EPOCHS, device=DEVICE):
         """
         :param network: the backbone neural network of the model
@@ -44,7 +44,6 @@ class ICarl:
         self.lr_init = lr_init
         self.mem_size = mem_size
         self.n_classes = n_classes
-        self.dictionary_size = dictionary_size
         self.decay = decay
         self.epochs = epochs
         self.lr_strat = [round(epochs*0.7), round(epochs*0.9)]
@@ -52,11 +51,11 @@ class ICarl:
 
         self.prototypes = None
 
-        self.alpha_dr_herding = np.zeros((n_classes, dictionary_size), np.float32)
+        self.alpha_dr_herding = [np.array([0]) for i in range(n_classes)]
 
     def fit(self, dataset, nb_cl, checkpoint=None, epochs=None):
 
-        self.alpha_dr_herding = np.zeros((self.n_classes, self.dictionary_size), np.float32)
+        self.alpha_dr_herding = [np.array([0]) for i in range(self.n_classes)]
         self.dataset = dataset
         self.nb_cl = nb_cl
         if epochs is not None:
@@ -238,7 +237,7 @@ class ICarl:
 
                 # Possible exemplars in the feature space and projected on the L2 sphere
                 # exemplars of class iter_dico + nb_cl
-                pinput = tensor(self.dataset.get_X_of_class(cl)).to(self.device)
+                pinput = self.dataset.get_X_of_class(cl).to(self.device)
                 mapped_prototypes = self.network.forward(pinput).cpu().detach().numpy()
                 D = mapped_prototypes.T
                 D = D / np.linalg.norm(D, axis=0)
@@ -246,17 +245,17 @@ class ICarl:
                 mu = np.mean(D, axis=1)
 
                 # set exemplar to zero
-                self.alpha_dr_herding[cl, :] = self.alpha_dr_herding[cl, :] * 0
+                self.alpha_dr_herding[cl] = np.zeros(pinput.shape[0])  # number of rows
                 w_t = mu
                 iter_herding = 0
                 iter_herding_eff = 0
                 # Herding algorithm
-                while not (np.sum(self.alpha_dr_herding[cl, :] != 0) == min(nb_protos_cl, 500)) and iter_herding_eff < 1000:
+                while not (np.sum(self.alpha_dr_herding[cl][:] != 0) == min(nb_protos_cl, 500)) and iter_herding_eff < 1000:
                     tmp_t = np.dot(w_t, D)
                     ind_max = np.argmax(tmp_t)
                     iter_herding_eff += 1
-                    if self.alpha_dr_herding[cl, ind_max] == 0:
-                        self.alpha_dr_herding[cl, ind_max] = 1 + iter_herding
+                    if self.alpha_dr_herding[cl][ind_max] == 0:
+                        self.alpha_dr_herding[cl][ind_max] = 1 + iter_herding
                         iter_herding += 1
                     w_t = w_t + mu - D[:, ind_max]
 
@@ -266,7 +265,7 @@ class ICarl:
                 for iter_dico in range(self.nb_cl):
                     cl = self.dataset.order[iteration2 * self.nb_cl + iter_dico]
 
-                    alph = self.alpha_dr_herding[cl, :]  # select the herd of the current class
+                    alph = self.alpha_dr_herding[cl][:]  # select the herd of the current class
                     alph = (alph > 0) * (alph < nb_protos_cl + 1) * 1.  # put one in the ones to select
 
                     # append exeplars in the protoset
@@ -277,14 +276,14 @@ class ICarl:
 
     def compute_means(self, iteration=10):
 
-        class_means = np.zeros((64, 100, 2))
+        class_means = np.zeros((64, 100, 3))
         nb_protos_cl = int(np.ceil(self.mem_size / self.nb_cl / iteration))  # num of exemplars per class
 
         for iteration2 in range(iteration):
 
             for iter_dico in range(self.nb_cl):
                 cl = self.dataset.order[iteration2 * self.nb_cl + iter_dico]
-                pinput = tensor(self.dataset.get_X_of_class(cl)).to(self.device)
+                pinput = self.dataset.get_X_of_class(cl).to(self.device)
 
                 # Collect data in the feature space for each class
                 mapped_prototypes = self.network.forward(pinput).cpu().detach().numpy()
@@ -292,14 +291,15 @@ class ICarl:
                 D = D / np.linalg.norm(D, axis=0)
 
                 # Flipped version also # Check performance, se uguali levalo
-                inverted = np.array(self.dataset.get_X_of_class(cl)[:, :, :, ::-1])
+                inverted = np.array(np.array(self.dataset.get_X_of_class(cl))[:, :, :, ::-1])
                 pinput2 = tensor(np.array((inverted - self.dataset.pixel_means), dtype=np.float32)).to(self.device)
                 mapped_prototypes2 = self.network.forward(pinput2).cpu().detach().numpy()
                 D2 = mapped_prototypes2.T
                 D2 = D2 / np.linalg.norm(D2, axis=0)
 
                 # iCaRL
-                alph = self.alpha_dr_herding[cl, :]  # importance of each image of this class
+                alph = self.alpha_dr_herding[cl]  # importance of each image of this class
+                dict_size = len(self.alpha_dr_herding[cl])
                 alph = (alph > 0) * (alph < nb_protos_cl + 1) * 1.  # 1 if in the current herd
 
                 # Handle the case in which there are no prototypes
@@ -318,7 +318,7 @@ class ICarl:
                 class_means[:, cl, 2] /= np.linalg.norm(class_means[:, cl, 0])
 
                 # Normal NCM
-                alph = np.ones(self.dictionary_size) / self.dictionary_size  # to make the avg over all samples
+                alph = np.ones(dict_size) / dict_size  # to make the avg over all samples
                 class_means[:, cl, 1] = (np.dot(D, alph))  # + np.dot(D2, alph)) / 2
                 # dot operation is for weighting each f(xi) with alpha
                 class_means[:, cl, 1] /= np.linalg.norm(class_means[:, cl, 1])

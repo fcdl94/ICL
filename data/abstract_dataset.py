@@ -17,22 +17,22 @@ class IAbstractDataset(ABC):
 
     @abstractmethod
     def get_X_of_class(self, idx):
-        # questa funzione non mi piace, dovremmo pensare di sostituirla (serve solo ad ICaRL per tenere prototipi)
-        # ICaRL dovrebbe gestirsi il suo meccanismo di memoria che stora le immagini quando gli arrivano
-        pass
+        # it must return a torch.tensor
+        raise NotImplementedError
 
     @abstractmethod
     def next_iteration(self, X_protoset=None, y_protoset=None, iteration=None):
-        pass
+        # it must return a DataLoader
+        raise NotImplementedError
 
     @abstractmethod
     def reset_iteration(self):
-        pass
+        raise NotImplementedError
 
     @abstractmethod
     def minibatches(self, train=True, augment=True):
-        pass
+        raise NotImplementedError
 
     @abstractmethod
     def minibatches_for_test(self, iteration, batch_size=None):
-        pass
+        raise NotImplementedError

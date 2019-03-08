@@ -105,6 +105,7 @@ class IDADataset(IAbstractDataset):
 
     def get_X_of_class(self, idx, source=False):
         # this can ask too much memory! be careful in using
+        # todo compute if from first iteration or not to give target or source accordingly
         if source:
             dataset = self.source
             target = self.y_source
@@ -112,8 +113,9 @@ class IDADataset(IAbstractDataset):
             dataset = self.target
             target = self.y_target
 
-        indices = [x.item for x in get_index_of_classes(target, idx)]
-        return dataset[indices]
+        images = [dataset[x.item()][0] for x in get_index_of_classes(target, idx)]
+
+        return torch.cat(images)
 
     def offset(self, iteration):
         return self.num_cl_first + self.num_cl_after*iteration
@@ -145,6 +147,7 @@ class IDADataset(IAbstractDataset):
         dataset = Subset(dataset_full, indices)  # here they are transformed with the transform defined in instantiation
 
         if x_additional is not None and y_additional is not None:
+            # use the same transform of the dataset to augment the prototypes
             dataset_prototypes = DatasetPrototypes(x_additional, y_additional, dataset_full.transform)
             dataset += dataset_prototypes
 

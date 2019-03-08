@@ -1,13 +1,12 @@
 import torchvision
 import numpy as np
 import torch
-from .abstract_dataset import IAbstractDataset
+# from .abstract_dataset import IAbstractDataset
 import os
 
 
-class ICIFAR(IAbstractDataset):
+class ICIFAR:#(IAbstractDataset):
 
-    # TODO remove dependencies on implementation of PyTorch (direct download the dataset or use the interface
     # TODO to update to PyTorch version 1.0.1 (torchvision 0.2.2)
 
     def __init__(self, root, batch_size, nc_per_iter, order_file=None, download=True, run_number=0):
@@ -68,7 +67,7 @@ class ICIFAR(IAbstractDataset):
         self.iteration = 0
 
     def get_X_of_class(self, idx):
-        return self.X_train[np.where(self.Y_train == idx)[0]]
+        return torch.tensor(self.X_train[np.where(self.Y_train == idx)[0]])
 
     def __unpack_data(self, x, y, size):
         x_ = np.zeros((100, size), dtype=np.float32)
