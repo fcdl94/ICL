@@ -6,6 +6,7 @@ class IAbstractDataset(ABC):
     def __init__(self):
         super().__init__()
         self.order = None
+        self.iteration = 0
 
     @property
     def order(self):
@@ -27,7 +28,7 @@ class IAbstractDataset(ABC):
 
     @abstractmethod
     def reset_iteration(self):
-        raise NotImplementedError
+        self.iteration = 0
 
     @abstractmethod
     def test_dataloader(self, iteration=None, batch_size=None):

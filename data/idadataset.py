@@ -2,7 +2,7 @@ import torchvision
 import numpy as np
 import torch
 from .abstract_dataset import IAbstractDataset
-from torch.utils.data import DataLoader, Sampler, Subset, Dataset
+from torch.utils.data import DataLoader, Subset
 from torchvision.datasets.folder import DatasetFolder
 from .common import DatasetPrototypes
 
@@ -22,8 +22,8 @@ class IDADataset(IAbstractDataset):
 
     # implemento i.l. come N classi + M + M + M etc.
     # e ovviamente D(b0) != D(bi) con i>0
-    def __init__(self, target, source, num_cl_first, num_cl_after, order_file=None,
-                 run=0, batch_size=64, workers=1):
+    def __init__(self, target, source, num_cl_first, num_cl_after,
+                 order_file=None, run=0, batch_size=64, workers=1):
         super().__init__()
 
         assert isinstance(target, DatasetFolder), "target must be torchvision.DataFolder"
@@ -71,7 +71,7 @@ class IDADataset(IAbstractDataset):
     def order(self, order):
         self.__order = order
 
-    def get_X_of_class(self, idx, source=False):
+    def get_X_of_class(self, idx):
         # this can ask too much memory! be careful in using
         idx_in_order = np.where(self.order == idx)[0]
 
@@ -124,9 +124,6 @@ class IDADataset(IAbstractDataset):
 
         return data_loader
 
-    def reset_iteration(self):
-        self.iteration = 0
-
     def test_dataloader(self, iteration=None, batch_size=None):
         if iteration is None:
             iteration = self.iteration-1
@@ -134,7 +131,7 @@ class IDADataset(IAbstractDataset):
             batch_size = self.batch_size
 
         classes = self.order[0: self.offset(iteration)]
-        print(classes)
+
         dataset_full = self.target
         indices = get_index_of_classes(self.y_target, classes)
         dataset = Subset(dataset_full, indices)
