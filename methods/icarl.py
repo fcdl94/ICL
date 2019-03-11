@@ -86,12 +86,12 @@ class ICarl:
                 y_protoset = None
 
             # Prepare the training data for the current batch of classes
-            dataset.next_iteration(x_protoset, y_protoset)
+            data_loader = dataset.next_iteration(x_protoset, y_protoset)
 
             # TRAIN THIS ITERATION #
             print('Batch of classes number {0} arrives ...'.format(iteration + 1))
 
-            self.incremental_fit(iteration)  # train for N epochs (after each epoch validate)
+            self.incremental_fit(iteration, data_loader)  # train for N epochs (after each epoch validate)
 
             # END OF TRAINING FOR THIS ITERATION #
 
@@ -139,7 +139,7 @@ class ICarl:
 
         return cumulative_accuracies
 
-    def incremental_fit(self, iteration):
+    def incremental_fit(self, iteration, data_loader):
         new_lr = self.lr_init
         optimizer = optim.SGD(filter(lambda p: p.requires_grad, self.network.parameters()), lr=new_lr, momentum=0.9,
                               weight_decay=self.decay, nesterov=False)
@@ -151,7 +151,7 @@ class ICarl:
             total = 0
 
             # In each epoch, we do a full pass over the training data:
-            for inputs, targets_prep in self.dataset.minibatches(augment=True):
+            for inputs, targets_prep in data_loader:
 
                 targets = np.zeros((inputs.shape[0], 100), np.float32)  # 100 = classes of cifar
                 targets[range(len(targets_prep)), targets_prep.type(torch.int32)] = 1.  # prepare target for CE loss
@@ -180,35 +180,36 @@ class ICarl:
                 correct += predicted.eq(targets_prep).sum().item()
 
             # END loop minibatches
-            self.network.eval()
-            test_loss = 0
-            correct = 0
-            total = 0
-            # count = 0
-            for inputs, targets_prep in self.dataset.minibatches(train=False):
-                # count += 1
-
-                targets = np.zeros((inputs.shape[0], 100), np.float32)
-                targets[range(len(targets_prep)), targets_prep.type(torch.int32)] = 1.
-
-                inputs = inputs.to(self.device)
-
-                outputs = self.network.forward(inputs)  # make the embedding
-                outputs = self.network.predict(outputs)  # make the prediction with sigmoid, making g_y(xi)
-
-                targets = torch.tensor(targets).to(outputs.device)
-                loss_bx = self.loss(outputs, targets)
-                test_loss += loss_bx.item()
-
-                targets_prep = torch.LongTensor(targets_prep).to(outputs.device)
-                _, predicted = outputs.max(1)
-                correct += predicted.eq(targets_prep).sum().item()
-
-                total += targets.size(0)
+            # self.network.eval()
+            # test_loss = 0
+            # correct = 0
+            # total = 0
+            # # count = 0
+            # for inputs, targets_prep in self.dataset.minibatches(train=False):
+            #     # count += 1
+            #
+            #     targets = np.zeros((inputs.shape[0], 100), np.float32)
+            #     targets[range(len(targets_prep)), targets_prep.type(torch.int32)] = 1.
+            #
+            #     inputs = inputs.to(self.device)
+            #
+            #     outputs = self.network.forward(inputs)  # make the embedding
+            #     outputs = self.network.predict(outputs)  # make the prediction with sigmoid, making g_y(xi)
+            #
+            #     targets = torch.tensor(targets).to(outputs.device)
+            #     loss_bx = self.loss(outputs, targets)
+            #     test_loss += loss_bx.item()
+            #
+            #     targets_prep = torch.LongTensor(targets_prep).to(outputs.device)
+            #     _, predicted = outputs.max(1)
+            #     correct += predicted.eq(targets_prep).sum().item()
+            #
+            #     total += targets.size(0)
+            #
 
             acc = 100. * correct / total
 
-            print(f"Epoch {epoch + 1} : Loss {test_loss / total:.8f} - Accuracy {acc:.2f}")
+            print(f"Epoch {epoch + 1} : Train Loss {train_loss / total:.8f}, Train Acc {acc:.2f}")
 
             # adjust learning rate
             if (epoch + 1) in self.lr_strat:
@@ -337,7 +338,8 @@ class ICarl:
         stat_icarl_inv = []
         stat_ncm = []
 
-        for inputs, targets_prep in self.dataset.minibatches_for_test(iteration):
+        data_loader = self.dataset.test_dataloader(iteration)
+        for inputs, targets_prep in data_loader:
             inputs = inputs.to(self.device)
 
             # compute prediction

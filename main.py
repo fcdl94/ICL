@@ -20,8 +20,9 @@ parser.add_argument('--dataset', default='icifar', help='Dataset name')
 parser.add_argument('--root', default='/home/fabioc/dataset', help='Base directory where are stored the data')
 parser.add_argument('--num_class_batch', default=10, type=int, help='Number of classes each increment')
 parser.add_argument('--num_runs', default=10, type=int, help='Number of runs to test (each run has different order')
+parser.add_argument('--order', default=None, help='Order file path')  # 'data/cifar_order.npy'
 # network variables
-parser.add_argument('--depth', default=5, type=int, help='Architetcture depth')
+parser.add_argument('--depth', default=5, type=int, help='Architecture depth')
 # method variables
 parser.add_argument('--method', default='icarl', help='Method to be tested')
 
@@ -38,7 +39,7 @@ dataset_name = args.dataset
 # now start with the main
 
 # get the data
-dataset = data.get_dataset(dataset_name)(DATA_ROOT, batch_size, nb_cl, 'data/cifar_order.npy')
+dataset = data.get_dataset(dataset_name)(DATA_ROOT, batch_size, nb_cl, args.order)
 accuracies = []
 
 for run in range(nb_runs):

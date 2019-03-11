@@ -4,7 +4,7 @@ import torch
 from .abstract_dataset import IAbstractDataset
 from torch.utils.data import DataLoader, Sampler, Subset, Dataset
 from torchvision.datasets.folder import DatasetFolder
-from PIL import Image
+from .common import DatasetPrototypes
 
 
 def get_index_of_classes(target, classes):
@@ -18,40 +18,8 @@ def get_index_of_classes(target, classes):
     return torch.cat(l)
 
 
-class ClassSampler(Sampler):
-    def __init__(self, target, classes):
-        super().__init__()
-        self.indices = get_index_of_classes(target, classes)
-
-    def __iter__(self):
-        return (self.indices[i].item() for i in torch.randperm(len(self.indices)))
-
-    def __len__(self):
-        return len(self.indices)
-
-
-class DatasetPrototypes(Dataset):
-
-    def __init__(self, x, y, transform=None):
-        super().__init__()
-        assert len(x) == len(y), "Error, the size of x and y must match"
-        self.x = x
-        self.y = y
-        self.transform = transform
-
-    def __getitem__(self, index):
-
-        sample = Image.fromarray(self.x[index])
-        if self.transform is not None:
-            sample = self.transform(sample)
-
-        return sample, self.y[index]
-
-    def __len__(self):
-        return len(self.y)
-
-
 class IDADataset(IAbstractDataset):
+
     # implemento i.l. come N classi + M + M + M etc.
     # e ovviamente D(b0) != D(bi) con i>0
     def __init__(self, target, source, num_cl_first, num_cl_after, order_file=None,
@@ -105,8 +73,9 @@ class IDADataset(IAbstractDataset):
 
     def get_X_of_class(self, idx, source=False):
         # this can ask too much memory! be careful in using
-        # todo compute if from first iteration or not to give target or source accordingly
-        if source:
+        idx_in_order = np.where(self.order == idx)[0]
+
+        if idx_in_order >= self.num_cl_first:
             dataset = self.source
             target = self.y_source
         else:
@@ -151,15 +120,24 @@ class IDADataset(IAbstractDataset):
             dataset_prototypes = DatasetPrototypes(x_additional, y_additional, dataset_full.transform)
             dataset += dataset_prototypes
 
-        data_loader = DataLoader(dataset, batch_size=self.batch_size, shuffle=True)
+        data_loader = DataLoader(dataset, batch_size=self.batch_size, shuffle=True, num_workers=self.workers)
 
         return data_loader
 
     def reset_iteration(self):
         self.iteration = 0
 
-    def minibatches(self, train=True, augment=True):
-        assert self.iteration > 0, "You must call next_iteration before minibatches"
+    def test_dataloader(self, iteration=None, batch_size=None):
+        if iteration is None:
+            iteration = self.iteration-1
+        if batch_size is None:
+            batch_size = self.batch_size
 
-    def minibatches_for_test(self, iteration, batch_size=None):
-        pass
+        classes = self.order[0: self.offset(iteration)]
+        print(classes)
+        dataset_full = self.target
+        indices = get_index_of_classes(self.y_target, classes)
+        dataset = Subset(dataset_full, indices)
+
+        data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=self.workers)
+        return data_loader

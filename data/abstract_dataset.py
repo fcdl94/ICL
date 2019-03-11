@@ -30,9 +30,6 @@ class IAbstractDataset(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def minibatches(self, train=True, augment=True):
-        raise NotImplementedError
-
-    @abstractmethod
-    def minibatches_for_test(self, iteration, batch_size=None):
+    def test_dataloader(self, iteration=None, batch_size=None):
+        # it must return a DataLoader for cumulative
         raise NotImplementedError

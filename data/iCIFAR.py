@@ -1,11 +1,12 @@
 import torchvision
 import numpy as np
 import torch
-# from .abstract_dataset import IAbstractDataset
+from .abstract_dataset import IAbstractDataset
 import os
+from .common import DatasetPrototypes
 
 
-class ICIFAR:#(IAbstractDataset):
+class ICIFAR(IAbstractDataset):
 
     # TODO to update to PyTorch version 1.0.1 (torchvision 0.2.2)
 
@@ -16,8 +17,8 @@ class ICIFAR:#(IAbstractDataset):
         self.train_dataset = torchvision.datasets.CIFAR100(root=root, train=True, download=download)
         self.valid_dataset = torchvision.datasets.CIFAR100(root=root, train=False, download=download)
         # normalize data
-        X_train_total = self.train_dataset.train_data.transpose(0, 3, 1, 2) / np.float32(255)  # shape n,3,32,32
-        X_valid_total = self.valid_dataset.test_data.transpose(0, 3, 1, 2) / np.float32(255)
+        X_train_total = self.train_dataset.train.transpose(0, 3, 1, 2) / np.float32(255)  # shape n,3,32,32
+        X_valid_total = self.valid_dataset.train.transpose(0, 3, 1, 2) / np.float32(255)
         pixel_means = np.mean(X_train_total, axis=0).reshape(1, 32, 32, 3).transpose(0, 3, 1, 2)
         self.pixel_means = pixel_means
 
