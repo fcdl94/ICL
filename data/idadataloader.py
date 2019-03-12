@@ -1,10 +1,10 @@
-import torchvision
 import numpy as np
 import torch
-from .abstract_dataset import IAbstractDataset
-from torch.utils.data import DataLoader, Subset
+from .abstract import AbstractIncrementalDataloader
+from torch.utils.data import DataLoader
 from torchvision.datasets.folder import DatasetFolder
-from .common import DatasetPrototypes
+from .common import DatasetPrototypes, Subset
+import torchvision.transforms
 
 
 def get_index_of_classes(target, classes):
@@ -18,24 +18,31 @@ def get_index_of_classes(target, classes):
     return torch.cat(l)
 
 
-class IDADataset(IAbstractDataset):
+class IDADataloader(AbstractIncrementalDataloader):
 
-    # implemento i.l. come N classi + M + M + M etc.
-    # e ovviamente D(b0) != D(bi) con i>0
-    def __init__(self, target, source, num_cl_first, num_cl_after,
-                 order_file=None, run=0, batch_size=64, workers=1):
+    def __init__(self, target, source,
+                 num_cl_first=10, num_cl_after=10,
+                 augmentation=None, transform=None,
+                 order_file=None, batch_size=64, run_number=0, workers=1):
         super().__init__()
+        # Incremental domain adaptation: N classes + M classes + M + M etc.
+        # where Domain(N) != Domain(M)
 
         assert isinstance(target, DatasetFolder), "target must be torchvision.DataFolder"
         assert isinstance(source, DatasetFolder), "source must be torchvision.DataFolder"
 
+        assert target.transform is None, "You should not specify any transform to the Datasets"
+        assert source.transform is None, "You should not specify any transform to the Datasets"
+
         # get important variables from dataset
-        self.source = source
-        self.target = target
+        self.source = source  # returns images as PIL Image
+        self.target = target  # returns images as PIL Image
+
+        self.augmentation = torchvision.transforms.Compose([augmentation, transform])  # this works as data augmentation
+        self.transform = transform  # this works as ToTensor, without changing the images.
 
         self.classes = target.classes
         self.num_classes = len(target.classes)
-        self.class_to_idx = target.class_to_idx
 
         self.y_target = torch.tensor(target.targets)
         self.y_source = torch.tensor(source.targets)
@@ -60,7 +67,7 @@ class IDADataset(IAbstractDataset):
 
         # init parameters
         self.iteration = 0
-        self.order = torch.tensor(self.full_order[run])
+        self.order = torch.tensor(self.full_order[run_number])
         self.data_loader = None
 
     @property
@@ -71,7 +78,7 @@ class IDADataset(IAbstractDataset):
     def order(self, order):
         self.__order = order
 
-    def get_X_of_class(self, idx):
+    def get_images_of_class(self, idx):
         # this can ask too much memory! be careful in using
         idx_in_order = np.where(self.order == idx)[0]
 
@@ -82,9 +89,12 @@ class IDADataset(IAbstractDataset):
             dataset = self.target
             target = self.y_target
 
-        images = [dataset[x.item()][0] for x in get_index_of_classes(target, idx)]
+        images = [dataset[x.item()][0].unsqueeze(0) for x in get_index_of_classes(target, idx)]
 
         return torch.cat(images)
+
+    def get_dataloader_of_class(self, idx):
+        pass
 
     def offset(self, iteration):
         return self.num_cl_first + self.num_cl_after*iteration
@@ -129,6 +139,9 @@ class IDADataset(IAbstractDataset):
             iteration = self.iteration-1
         if batch_size is None:
             batch_size = self.batch_size
+
+        if iteration > self.num_iteration_max:
+            raise Exception("You should stop before, you asked too many iterations")
 
         classes = self.order[0: self.offset(iteration)]
 

@@ -61,8 +61,8 @@ class ICarl:
         if epochs is not None:
             self.epochs = epochs
 
-        x_protoset_cumuls = []
-        y_protoset_cumuls = []
+        x_protoset = None
+        y_protoset = None
 
         cumulative_accuracies = []
 
@@ -73,17 +73,10 @@ class ICarl:
             start_iter = check_dict['iteration']
             self.network.load_state_dict(check_dict['network'])
             self.network2.load_state_dict(check_dict['network2'])
-            x_protoset_cumuls = check_dict['X']
-            y_protoset_cumuls = check_dict['Y']
+            x_protoset = check_dict['X']
+            y_protoset = check_dict['Y']
 
         for iteration in range(start_iter, self.n_classes // nb_cl):
-            # Add the stored exemplars to the training data
-            if iteration > 0 and len(x_protoset_cumuls) > 0:
-                x_protoset = np.concatenate(x_protoset_cumuls)
-                y_protoset = np.concatenate(y_protoset_cumuls)
-            else:
-                x_protoset = None
-                y_protoset = None
 
             # Prepare the training data for the current batch of classes
             data_loader = dataset.next_iteration(x_protoset, y_protoset)
@@ -97,33 +90,31 @@ class ICarl:
 
             # UPDATE EXEMPLARS #
             print('Updating exemplar set...')
-            x_protoset_cumuls, y_protoset_cumuls = self.update_exemplars(iteration)
+            x_protoset, y_protoset = self.update_exemplars(iteration)
 
             # Save training checkpoint
             torch.save({
                 'iteration': iteration,
                 'network': self.network.state_dict(),
                 'network2': self.network2.state_dict(),
-                'X': x_protoset_cumuls,
-                'Y': y_protoset_cumuls
+                'X': x_protoset,
+                'Y': y_protoset
             }, "checkpoint/iter_" + str(iteration) + "_checkpoint.pth.tar")
 
             # COMPUTE ACCURACY ##
-            acc_cum = self.test(iteration + 1)
+            acc_cum = self.test(iteration)
 
             print("Cumulative results")
             print("  top 1 accuracy iCaRL          :\t{:.2f} %".format(acc_cum[0]))
             print("  top 1 accuracy Hybrid 1       :\t{:.2f} %".format(acc_cum[1]))
             print("  top 1 accuracy NCM            :\t{:.2f} %".format(acc_cum[2]))
-            print("  top 1 accuracy INV            :\t{:.2f} %".format(acc_cum[3]))
 
-            acc_base = self.test(1)
+            acc_base = self.test(0)
 
             print("First batch results")
             print("  top 1 accuracy iCaRL          :\t{:.2f} %".format(acc_base[0]))
             print("  top 1 accuracy Hybrid 1       :\t{:.2f} %".format(acc_base[1]))
             print("  top 1 accuracy NCM            :\t{:.2f} %".format(acc_base[2]))
-            print("  top 1 accuracy INV            :\t{:.2f} %".format(acc_base[3]))
 
             cumulative_accuracies.append(acc_cum)
 
@@ -234,19 +225,24 @@ class ICarl:
         if nb_protos_cl > 0:
 
             for iter_dico in range(self.nb_cl):
-                cl = self.dataset.order[iteration * self.nb_cl + iter_dico]
+                cl = self.dataset.order[iteration * self.nb_cl + iter_dico].item()
 
-                # Possible exemplars in the feature space and projected on the L2 sphere
-                # exemplars of class iter_dico + nb_cl
-                pinput = self.dataset.get_X_of_class(cl).to(self.device)
-                mapped_prototypes = self.network.forward(pinput).cpu().detach().numpy()
+                pinput = self.dataset.get_dataloader_of_class(cl)
+
+                output = []
+                for img, tar in pinput:
+                    img = img.to(self.device)
+                    output.append(self.network.forward(img).cpu().detach())
+
+                # Collect data in the feature space for each class
+                mapped_prototypes = torch.cat(output).numpy()
                 D = mapped_prototypes.T
                 D = D / np.linalg.norm(D, axis=0)
                 # Herding procedure : ranking of the potential exemplars
                 mu = np.mean(D, axis=1)
 
                 # set exemplar to zero
-                self.alpha_dr_herding[cl] = np.zeros(pinput.shape[0])  # number of rows
+                self.alpha_dr_herding[cl] = np.zeros(mapped_prototypes.shape[0])  # number of rows
                 w_t = mu
                 iter_herding = 0
                 iter_herding_eff = 0
@@ -264,39 +260,40 @@ class ICarl:
             for iteration2 in range(iteration + 1):
 
                 for iter_dico in range(self.nb_cl):
-                    cl = self.dataset.order[iteration2 * self.nb_cl + iter_dico]
+                    cl = self.dataset.order[iteration2 * self.nb_cl + iter_dico].item()
 
                     alph = self.alpha_dr_herding[cl][:]  # select the herd of the current class
                     alph = (alph > 0) * (alph < nb_protos_cl + 1) * 1.  # put one in the ones to select
 
                     # append exeplars in the protoset
-                    X_protoset_cumuls.append(self.dataset.get_X_of_class(cl)[np.where(alph == 1)[0]])
-                    Y_protoset_cumuls.append(cl * np.ones(len(np.where(alph == 1)[0]), dtype=np.int32))
+                    X_protoset_cumuls.append(self.dataset.get_images_of_class(cl)[np.where(alph == 1)[0]])
+                    Y_protoset_cumuls.append(cl * torch.ones(len(np.where(alph == 1)[0]), dtype=torch.int))
 
-        return X_protoset_cumuls, Y_protoset_cumuls
+        x_protoset = torch.cat(X_protoset_cumuls)
+        y_protoset = torch.cat(Y_protoset_cumuls)
+
+        return x_protoset, y_protoset
 
     def compute_means(self, iteration=10):
 
-        class_means = np.zeros((64, 100, 3))
-        nb_protos_cl = int(np.ceil(self.mem_size / self.nb_cl / iteration))  # num of exemplars per class
+        class_means = np.zeros((64, 100, 2))
+        nb_protos_cl = int(np.ceil(self.mem_size / self.nb_cl / (iteration + 1)))  # num of exemplars per class
 
-        for iteration2 in range(iteration):
+        for iteration2 in range(iteration+1):
 
             for iter_dico in range(self.nb_cl):
-                cl = self.dataset.order[iteration2 * self.nb_cl + iter_dico]
-                pinput = self.dataset.get_X_of_class(cl).to(self.device)
+                cl = self.dataset.order[iteration2 * self.nb_cl + iter_dico].item()
+                pinput = self.dataset.get_dataloader_of_class(cl)
+
+                output = []
+                for img, tar in pinput:
+                    img = img.to(self.device)
+                    output.append(self.network.forward(img).cpu().detach())
 
                 # Collect data in the feature space for each class
-                mapped_prototypes = self.network.forward(pinput).cpu().detach().numpy()
-                D = mapped_prototypes.T
+                mapped_prototypes = torch.cat(output).numpy()  # should be 500 x 64 in CIFAR
+                D = mapped_prototypes.T  # now each column is a sample
                 D = D / np.linalg.norm(D, axis=0)
-
-                # Flipped version also # Check performance, se uguali levalo
-                inverted = np.array(np.array(self.dataset.get_X_of_class(cl))[:, :, :, ::-1])
-                pinput2 = tensor(np.array((inverted - self.dataset.pixel_means), dtype=np.float32)).to(self.device)
-                mapped_prototypes2 = self.network.forward(pinput2).cpu().detach().numpy()
-                D2 = mapped_prototypes2.T
-                D2 = D2 / np.linalg.norm(D2, axis=0)
 
                 # iCaRL
                 alph = self.alpha_dr_herding[cl]  # importance of each image of this class
@@ -309,18 +306,13 @@ class ICarl:
                     s = 1
 
                 alph = alph / s  # to make the average only for the current prototypes.
-                class_means[:, cl, 0] = (np.dot(D, alph))  # + np.dot(D2, alph)) / 2
+                class_means[:, cl, 0] = (np.dot(D, alph))
                 # dot operation is for weighting each f(xi) with alpha
                 class_means[:, cl, 0] /= np.linalg.norm(class_means[:, cl, 0])
 
-                # ICarl + flipped
-                class_means[:, cl, 2] = (np.dot(D, alph) + np.dot(D2, alph)) / 2
-                # dot operation is for weighting each f(xi) with alpha
-                class_means[:, cl, 2] /= np.linalg.norm(class_means[:, cl, 0])
-
                 # Normal NCM
                 alph = np.ones(dict_size) / dict_size  # to make the avg over all samples
-                class_means[:, cl, 1] = (np.dot(D, alph))  # + np.dot(D2, alph)) / 2
+                class_means[:, cl, 1] = (np.dot(D, alph))
                 # dot operation is for weighting each f(xi) with alpha
                 class_means[:, cl, 1] /= np.linalg.norm(class_means[:, cl, 1])
 
@@ -331,11 +323,10 @@ class ICarl:
         if class_means is None and self.mem_size > 0:
             class_means = self.compute_means(iteration)
 
-        top1_acc_list = np.zeros(4)
+        top1_acc_list = np.zeros(3)
 
         stat_hb1 = []
         stat_icarl = []
-        stat_icarl_inv = []
         stat_ncm = []
 
         data_loader = self.dataset.test_dataloader(iteration)
@@ -356,15 +347,11 @@ class ICarl:
                 # Compute score for iCaRL
                 sqd = cdist(class_means[:, :, 0].T, outputs, 'sqeuclidean')  # Squared euclidean distance
                 score_icarl = (-sqd).T
-                # Compute score for iCaRL-INV
-                sqd = cdist(class_means[:, :, 2].T, outputs, 'sqeuclidean')  # Squared euclidean distance
-                score_icarl_inv = (-sqd).T
                 # Compute score for NCM
                 sqd = cdist(class_means[:, :, 1].T, outputs, 'sqeuclidean')  # Squared euclidean distance
                 score_ncm = (-sqd).T
 
                 stat_icarl += ([ll in best for ll, best in zip(targets_prep, np.argsort(score_icarl, axis=1)[:, -1:])])
-                stat_icarl_inv += ([ll in best for ll, best in zip(targets_prep, np.argsort(score_icarl_inv, axis=1)[:, -1:])])
                 stat_ncm += ([ll in best for ll, best in zip(targets_prep, np.argsort(score_ncm, axis=1)[:, -1:])])
 
             stat_hb1 += ([ll in best for ll, best in zip(targets_prep, np.argsort(pred, axis=1)[:, -1:])])
@@ -373,7 +360,6 @@ class ICarl:
         if self.mem_size > 0:
             top1_acc_list[0] = np.average(stat_icarl) * 100  # ICarl
             top1_acc_list[2] = np.average(stat_ncm) * 100  # NCM
-            top1_acc_list[3] = np.average(stat_icarl_inv) * 100  # NCM
 
         top1_acc_list[1] = np.average(stat_hb1) * 100  # Hybrid 1
 

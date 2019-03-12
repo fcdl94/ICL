@@ -1,11 +1,14 @@
 from abc import ABC, abstractmethod
 
 
-class IAbstractDataset(ABC):
+class AbstractIncrementalDataloader(ABC):
 
     def __init__(self):
         super().__init__()
         self.order = None
+        self.iteration = 0
+
+    def reset_iteration(self):
         self.iteration = 0
 
     @property
@@ -17,18 +20,19 @@ class IAbstractDataset(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def get_X_of_class(self, idx):
-        # it must return a torch.tensor
+    def get_images_of_class(self, idx):
+        # it must return the Images as Tensors (without any transformation)
         raise NotImplementedError
 
     @abstractmethod
-    def next_iteration(self, X_protoset=None, y_protoset=None, iteration=None):
+    def get_dataloader_of_class(self, idx):
+        # it must return a DataLoader that returns the images not augmented!
+        raise NotImplementedError
+
+    @abstractmethod
+    def next_iteration(self, x_additional=None, y_additional=None, iteration=None):
         # it must return a DataLoader
         raise NotImplementedError
-
-    @abstractmethod
-    def reset_iteration(self):
-        self.iteration = 0
 
     @abstractmethod
     def test_dataloader(self, iteration=None, batch_size=None):
