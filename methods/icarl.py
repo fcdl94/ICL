@@ -200,7 +200,8 @@ class ICarl:
 
             acc = 100. * correct / total
 
-            print(f"Epoch {epoch + 1} : Train Loss {train_loss / total:.8f}, Train Acc {acc:.2f}")
+            if (epoch+1) % (self.epochs//10) == 0:
+                print(f"Epoch {epoch + 1} : Train Loss {train_loss / total:.8f}, Train Acc {acc:.2f}")
 
             # adjust learning rate
             if (epoch + 1) in self.lr_strat:
@@ -247,7 +248,7 @@ class ICarl:
                 iter_herding = 0
                 iter_herding_eff = 0
                 # Herding algorithm
-                while not (np.sum(self.alpha_dr_herding[cl][:] != 0) == min(nb_protos_cl, 500)) and iter_herding_eff < 1000:
+                while not (np.sum(self.alpha_dr_herding[cl] != 0) == min(nb_protos_cl, 500)) and iter_herding_eff < 1000:
                     tmp_t = np.dot(w_t, D)
                     ind_max = np.argmax(tmp_t)
                     iter_herding_eff += 1
@@ -262,7 +263,7 @@ class ICarl:
                 for iter_dico in range(self.nb_cl):
                     cl = self.dataset.order[iteration2 * self.nb_cl + iter_dico].item()
 
-                    alph = self.alpha_dr_herding[cl][:]  # select the herd of the current class
+                    alph = self.alpha_dr_herding[cl]  # select the herd of the current class
                     alph = (alph > 0) * (alph < nb_protos_cl + 1) * 1.  # put one in the ones to select
 
                     # append exeplars in the protoset
@@ -330,6 +331,7 @@ class ICarl:
         stat_ncm = []
 
         data_loader = self.dataset.test_dataloader(iteration)
+
         for inputs, targets_prep in data_loader:
             inputs = inputs.to(self.device)
 
@@ -358,20 +360,20 @@ class ICarl:
             # use the logits
 
         if self.mem_size > 0:
-            top1_acc_list[0] = np.average(stat_icarl) * 100  # ICarl
-            top1_acc_list[2] = np.average(stat_ncm) * 100  # NCM
+            top1_acc_list[0] = np.average(stat_icarl) * 100.  # ICarl
+            top1_acc_list[2] = np.average(stat_ncm) * 100.  # NCM
 
-        top1_acc_list[1] = np.average(stat_hb1) * 100  # Hybrid 1
+        top1_acc_list[1] = np.average(stat_hb1) * 100.  # Hybrid 1
 
         return top1_acc_list
 
     def predict(self, inputs, method=0):
-        '''
+        """
         :return the predicted class for the inputs as tensor in cpu
 
         :param inputs: tensors to be evaluated
         :param method: 0 (def) is ICaRL, 1 is NCM, 2 is ICaRL-inv, 3 is with sigmoid
-        '''
+        """
         class_means = self.compute_means(self.n_classes // self.nb_cl)
         outputs = self.network.forward(inputs)  # returns embeddings
         if method == 3:

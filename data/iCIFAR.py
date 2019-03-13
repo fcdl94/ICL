@@ -27,15 +27,20 @@ class ICIFAR(AbstractIncrementalDataloader):
                  num_cl_first=10, num_cl_after=10,
                  augmentation=None, transform=None,
                  order_file=None, batch_size=64, run_number=0, workers=1):
+
         super().__init__()
+
         # Load the dataset
         self.train_dataset = \
             torchvision.datasets.CIFAR100(root=root, train=True, download=download, transform=None)
         self.valid_dataset = \
             torchvision.datasets.CIFAR100(root=root, train=False, download=download, transform=transform)
 
-        self.augmentation = torchvision.transforms.Compose([augmentation, transform])  # this works as data augmentation
-        self.transform = transform  # this works as ToTensor, without changing the images.
+        if augmentation is not None:
+            self.augmentation = torchvision.transforms.Compose([augmentation, transform])
+        else:
+            self.augmentation = transform
+        self.transform = transform  # this works as ToTensor, without changing the image content.
 
         # get targets to compute indices
         self.train_target = torch.tensor(self.train_dataset.targets)  # this does not work with torchvision < 0.2.2
@@ -152,5 +157,5 @@ class ICIFAR(AbstractIncrementalDataloader):
         indices = get_index_of_classes(self.valid_target, classes)
         dataset = Subset(dataset_full, indices)
 
-        data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=self.workers)
+        data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=self.workers)
         return data_loader
