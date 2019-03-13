@@ -3,19 +3,8 @@ import numpy as np
 import torch
 from .abstract import AbstractIncrementalDataloader
 import os
-from .common import DatasetPrototypes, Subset
+from .common import DatasetPrototypes, Subset, get_index_of_classes
 from torch.utils.data import DataLoader
-
-
-def get_index_of_classes(target, classes):
-    l = []
-
-    if isinstance(classes, int):  # if only one class is given, make it a list
-        classes = [classes]
-
-    for cl in classes:
-        l.append(torch.nonzero(target == cl).squeeze())
-    return torch.cat(l)
 
 
 class ICIFAR(AbstractIncrementalDataloader):
@@ -87,18 +76,16 @@ class ICIFAR(AbstractIncrementalDataloader):
         dataset = self.train_dataset
         target = self.train_target
 
-        trans = torchvision.transforms.ToTensor()
-
         # dataset[x.item()][0] is PIL Image (I'm not using any transform)
-        images = [trans(dataset[x.item()][0]).unsqueeze(0) for x in get_index_of_classes(target, [idx])]
+        images = [dataset[x.item()][0] for x in get_index_of_classes(target, [idx])]
 
-        return torch.cat(images)
+        return images  # this is a list of PIL images
 
     def get_dataloader_of_class(self, idx):
         indices = get_index_of_classes(self.train_target, [idx])
         dataset = Subset(self.train_dataset, indices, self.transform)
 
-        sampler = torch.utils.data.SequentialSampler(dataset)
+        sampler = torch.utils.data.SequentialSampler(dataset)  # to guarantee sequentiality of indices
 
         return DataLoader(dataset, batch_size=self.batch_size, sampler=sampler, num_workers=self.workers)
 
@@ -108,15 +95,6 @@ class ICIFAR(AbstractIncrementalDataloader):
         return self.num_cl_first + self.num_cl_after*iteration
 
     def next_iteration(self, x_additional=None, y_additional=None, iteration=None):
-        '''
-        This function returns the data on which perform the epochs for the selected iteration.
-        Training data are shuffled.
-
-        :param x_additional: Data to add at the dataset
-        :param y_additional: Data to add at the dataset
-        :param iteration:  Selection for the iteration
-        :return: DataLoader to iterate across data
-        '''
 
         if iteration is not None:
             self.iteration = iteration
@@ -142,16 +120,21 @@ class ICIFAR(AbstractIncrementalDataloader):
 
         return data_loader
 
-    def test_dataloader(self, iteration=None, batch_size=None):
+    def test_dataloader(self, iteration=None, cumulative=True, batch_size=None):
         if iteration is None:
             iteration = self.iteration-1
         if batch_size is None:
             batch_size = self.batch_size
 
+        if cumulative:
+            start_offset = 0
+        else:
+            start_offset = self.offset(iteration-1)
+
         if iteration > self.num_iteration_max:
             raise Exception("You should stop before, you asked too many iterations")
 
-        classes = self.order[0: self.offset(iteration)]
+        classes = self.order[start_offset: self.offset(iteration)]
 
         dataset_full = self.valid_dataset
         indices = get_index_of_classes(self.valid_target, classes)

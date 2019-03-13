@@ -1,10 +1,28 @@
 from torch.utils.data import Dataset
 from torchvision.transforms import ToPILImage
+import torch
+
+
+def get_index_of_classes(target, classes):
+    l = []
+
+    if isinstance(classes, int):  # if only one class is given, make it a list
+        classes = [classes]
+
+    for cl in classes:
+        l.append(torch.nonzero(target == cl).squeeze())
+    return torch.cat(l)
 
 
 class DatasetPrototypes(Dataset):
 
     def __init__(self, x, y, transform=None):
+        """
+
+        :param x: PIL Images
+        :param y: integer list
+        :param transform: torchvision.transforms that can transform PIL into tensor
+        """
         super().__init__()
         assert len(x) == len(y), "Error, the size of x and y must match"
         self.x = x
@@ -13,8 +31,7 @@ class DatasetPrototypes(Dataset):
 
     def __getitem__(self, index):
 
-        trans = ToPILImage()
-        sample = trans(self.x[index])
+        sample = self.x[index]
 
         if self.transform is not None:
             sample = self.transform(sample)

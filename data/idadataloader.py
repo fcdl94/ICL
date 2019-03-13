@@ -3,19 +3,8 @@ import torch
 from .abstract import AbstractIncrementalDataloader
 from torch.utils.data import DataLoader
 from torchvision.datasets.folder import DatasetFolder
-from .common import DatasetPrototypes, Subset
+from .common import DatasetPrototypes, Subset, get_index_of_classes
 import torchvision.transforms
-
-
-def get_index_of_classes(target, classes):
-    l = []
-
-    if isinstance(classes, int):  # if only one class is given, make it a list
-        classes = [classes]
-
-    for cl in classes:
-        l.append(torch.nonzero(target == cl).squeeze())
-    return torch.cat(l)
 
 
 class IDADataloader(AbstractIncrementalDataloader):
@@ -38,7 +27,7 @@ class IDADataloader(AbstractIncrementalDataloader):
         self.source = source  # returns images as PIL Image
         self.target = target  # returns images as PIL Image
 
-        self.augmentation = torchvision.transforms.Compose([augmentation, transform])  # this works as data augmentation
+        self.augmentation = augmentation  # this works as data augmentation
         self.transform = transform  # this works as ToTensor, without changing the images.
 
         self.classes = target.classes
@@ -80,6 +69,8 @@ class IDADataloader(AbstractIncrementalDataloader):
 
     def get_images_of_class(self, idx):
         # this can ask too much memory! be careful in using
+
+        # select the right dataset
         idx_in_order = np.where(self.order == idx)[0]
 
         if idx_in_order >= self.num_cl_first:
@@ -89,19 +80,41 @@ class IDADataloader(AbstractIncrementalDataloader):
             dataset = self.target
             target = self.y_target
 
-        images = [dataset[x.item()][0].unsqueeze(0) for x in get_index_of_classes(target, idx)]
+        # dataset[x.item()][0] is PIL Image (I'm not using any transform)
+        images = [dataset[x.item()][0] for x in get_index_of_classes(target, [idx])]
 
-        return torch.cat(images)
+        return images  # this is a list of PIL images
 
     def get_dataloader_of_class(self, idx):
-        pass
+        # select the right dataset
+        idx_in_order = np.where(self.order == idx)[0]
+
+        if idx_in_order >= self.num_cl_first:
+            dataset = self.source
+            target = self.y_source
+        else:
+            dataset = self.target
+            target = self.y_target
+
+        indices = get_index_of_classes(target, [idx])
+        dataset = Subset(dataset, indices, self.transform)
+
+        sampler = torch.utils.data.SequentialSampler(dataset)  # to guarantee sequentiality of indices
+
+        return DataLoader(dataset, batch_size=self.batch_size, sampler=sampler, num_workers=self.workers)
 
     def offset(self, iteration):
+        if iteration == -1:
+            return 0
+        if iteration >= self.num_iteration_max:
+            iteration = self.num_iteration_max - 1
         return self.num_cl_first + self.num_cl_after*iteration
 
     def next_iteration(self, x_additional=None, y_additional=None, iteration=None):
+
         # iteration goes from 0 to max_iter-1
-        # and the first iteration is a special one, where we return target and not source dataset with N classes (not M)
+        # and the first iteration is a special one,
+        # where we return target and not source dataset with N classes (not M)
 
         if iteration is not None:
             self.iteration = iteration
@@ -109,8 +122,8 @@ class IDADataloader(AbstractIncrementalDataloader):
             iteration = self.iteration
             self.iteration += 1
 
+        # chose the dataset
         if iteration == 0:
-            # set up the right DataLoader
             dataset_full = self.target
             classes = self.order[0: self.num_cl_first]
             indices = get_index_of_classes(self.y_target, classes)
@@ -123,31 +136,41 @@ class IDADataloader(AbstractIncrementalDataloader):
         else:
             raise Exception("You should stop before, you asked too many iterations")
 
-        dataset = Subset(dataset_full, indices)  # here they are transformed with the transform defined in instantiation
+        if self.augmentation is not None:
+            transform = torchvision.transforms.Compose([self.augmentation, self.transform])
+        else:
+            transform = self.transform
+
+        dataset = Subset(dataset_full, indices, transform)
 
         if x_additional is not None and y_additional is not None:
             # use the same transform of the dataset to augment the prototypes
-            dataset_prototypes = DatasetPrototypes(x_additional, y_additional, dataset_full.transform)
+            dataset_prototypes = DatasetPrototypes(x_additional, y_additional, transform)
             dataset += dataset_prototypes
 
         data_loader = DataLoader(dataset, batch_size=self.batch_size, shuffle=True, num_workers=self.workers)
 
         return data_loader
 
-    def test_dataloader(self, iteration=None, batch_size=None):
+    def test_dataloader(self, iteration=None, cumulative=True, batch_size=None):
         if iteration is None:
             iteration = self.iteration-1
         if batch_size is None:
             batch_size = self.batch_size
 
+        if cumulative:
+            start_offset = 0
+        else:
+            start_offset = self.offset(iteration-1)
+
         if iteration > self.num_iteration_max:
             raise Exception("You should stop before, you asked too many iterations")
 
-        classes = self.order[0: self.offset(iteration)]
+        classes = self.order[start_offset: self.offset(iteration)]
 
         dataset_full = self.target
         indices = get_index_of_classes(self.y_target, classes)
-        dataset = Subset(dataset_full, indices)
+        dataset = Subset(dataset_full, indices, self.transform)
 
-        data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=self.workers)
+        data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=self.workers)
         return data_loader

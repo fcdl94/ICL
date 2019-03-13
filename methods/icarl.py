@@ -101,15 +101,23 @@ class ICarl:
                 'Y': y_protoset
             }, "checkpoint/iter_" + str(iteration) + "_checkpoint.pth.tar")
 
+            means = self.compute_means(iteration)
             # COMPUTE ACCURACY ##
-            acc_cum = self.test(iteration)
+            acc_cum = self.test(iteration, means)
 
             print("Cumulative results")
             print("  top 1 accuracy iCaRL          :\t{:.2f} %".format(acc_cum[0]))
             print("  top 1 accuracy Hybrid 1       :\t{:.2f} %".format(acc_cum[1]))
             print("  top 1 accuracy NCM            :\t{:.2f} %".format(acc_cum[2]))
 
-            acc_base = self.test(0)
+            acc_new = self.test(iteration, means, cumulative=False)
+
+            print("New batch results")
+            print("  top 1 accuracy iCaRL          :\t{:.2f} %".format(acc_new[0]))
+            print("  top 1 accuracy Hybrid 1       :\t{:.2f} %".format(acc_new[1]))
+            print("  top 1 accuracy NCM            :\t{:.2f} %".format(acc_new[2]))
+
+            acc_base = self.test(0, means)
 
             print("First batch results")
             print("  top 1 accuracy iCaRL          :\t{:.2f} %".format(acc_base[0]))
@@ -220,8 +228,8 @@ class ICarl:
         self.network.eval()
 
         # Prepare the protoset
-        X_protoset_cumuls = []
-        Y_protoset_cumuls = []
+        x_protoset = None
+        y_protoset = None
 
         if nb_protos_cl > 0:
 
@@ -257,6 +265,9 @@ class ICarl:
                         iter_herding += 1
                     w_t = w_t + mu - D[:, ind_max]
 
+            x_protoset = []
+            y_protoset = []
+
             # Storing the selected exemplars in the protoset
             for iteration2 in range(iteration + 1):
 
@@ -267,11 +278,9 @@ class ICarl:
                     alph = (alph > 0) * (alph < nb_protos_cl + 1) * 1.  # put one in the ones to select
 
                     # append exeplars in the protoset
-                    X_protoset_cumuls.append(self.dataset.get_images_of_class(cl)[np.where(alph == 1)[0]])
-                    Y_protoset_cumuls.append(cl * torch.ones(len(np.where(alph == 1)[0]), dtype=torch.int))
-
-        x_protoset = torch.cat(X_protoset_cumuls)
-        y_protoset = torch.cat(Y_protoset_cumuls)
+                    img = self.dataset.get_images_of_class(cl)
+                    x_protoset += [img[j] for j in range(len(alph)) if alph[j] == 1]
+                    y_protoset += [cl for j in range(len(alph)) if alph[j] == 1]
 
         return x_protoset, y_protoset
 
@@ -319,7 +328,7 @@ class ICarl:
 
         return class_means
 
-    def test(self, iteration, class_means=None):
+    def test(self, iteration, class_means=None, cumulative=True):
 
         if class_means is None and self.mem_size > 0:
             class_means = self.compute_means(iteration)
@@ -330,7 +339,7 @@ class ICarl:
         stat_icarl = []
         stat_ncm = []
 
-        data_loader = self.dataset.test_dataloader(iteration)
+        data_loader = self.dataset.test_dataloader(iteration, comulative=cumulative)
 
         for inputs, targets_prep in data_loader:
             inputs = inputs.to(self.device)
