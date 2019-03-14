@@ -236,6 +236,7 @@ class ICarl:
             for iter_dico in range(self.nb_cl):
                 cl = self.dataset.order[iteration * self.nb_cl + iter_dico].item()
 
+                # per controllare che sia in ordine, qui si potrebbe prendere classi e mapparle
                 pinput = self.dataset.get_dataloader_of_class(cl)
 
                 output = []
@@ -256,7 +257,8 @@ class ICarl:
                 iter_herding = 0
                 iter_herding_eff = 0
                 # Herding algorithm
-                while not (np.sum(self.alpha_dr_herding[cl] != 0) == min(nb_protos_cl, 500)) and iter_herding_eff < 1000:
+                while not (np.sum(self.alpha_dr_herding[cl] != 0) == min(nb_protos_cl, mapped_prototypes.shape[0])) \
+                        and iter_herding_eff < 1000:
                     tmp_t = np.dot(w_t, D)
                     ind_max = np.argmax(tmp_t)
                     iter_herding_eff += 1
@@ -284,17 +286,21 @@ class ICarl:
 
         return x_protoset, y_protoset
 
-    def compute_means(self, iteration=10):
+    def compute_num_classes(self, iteration):
+        return self.nb_cl * (iteration + 1)
+
+    def compute_means(self, iteration):
 
         class_means = np.zeros((64, 100, 2))
-        nb_protos_cl = int(np.ceil(self.mem_size / self.nb_cl / (iteration + 1)))  # num of exemplars per class
+        nb_protos_cl = int(np.ceil(self.mem_size / self.compute_num_classes(iteration)))  # num of exemplars per class
 
         for iteration2 in range(iteration+1):
 
             for iter_dico in range(self.nb_cl):
-                cl = self.dataset.order[iteration2 * self.nb_cl + iter_dico].item()
-                pinput = self.dataset.get_dataloader_of_class(cl)
+                cl = self.dataset.order[self.compute_num_classes(iteration2) + iter_dico].item()  # pick actual class
 
+                # compute network resposes for images of class cl
+                pinput = self.dataset.get_dataloader_of_class(cl)
                 output = []
                 for img, tar in pinput:
                     img = img.to(self.device)
@@ -339,7 +345,7 @@ class ICarl:
         stat_icarl = []
         stat_ncm = []
 
-        data_loader = self.dataset.test_dataloader(iteration, comulative=cumulative)
+        data_loader = self.dataset.test_dataloader(iteration, cumulative=cumulative)
 
         for inputs, targets_prep in data_loader:
             inputs = inputs.to(self.device)

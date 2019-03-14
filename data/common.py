@@ -57,6 +57,7 @@ class Subset(Dataset):
 
     def __getitem__(self, idx):
         sample, target = self.dataset[self.indices[idx]]
+
         if self.transform is not None:
             sample = self.transform(sample)
 
