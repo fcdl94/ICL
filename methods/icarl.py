@@ -141,6 +141,15 @@ class ICarl:
 
             print("")
 
+        means = self.compute_means(9)
+        for i in range(10):
+            acc_cum = self.test(i, means, cumulative=False)
+
+            print(f"Batch {i + 1}")
+            print("  top 1 accuracy iCaRL          :\t{:.2f} %".format(acc_cum[0]))
+            print("  top 1 accuracy Hybrid 1       :\t{:.2f} %".format(acc_cum[1]))
+            print("  top 1 accuracy NCM            :\t{:.2f} %".format(acc_cum[2]))
+
         torch.save(
             {
              "network": self.network.state_dict()
@@ -305,60 +314,61 @@ class ICarl:
         class_means = np.zeros((64, 100, 3))
         nb_protos_cl = int(np.ceil(self.mem_size / self.compute_num_classes(iteration)))  # num of exemplars per class
 
-        for iteration2 in range(iteration+1):
+        if nb_protos_cl > 0:
+            for iteration2 in range(iteration+1):
 
-            for iter_dico in range(self.nb_cl):
-                cl = self.dataset.order[self.compute_num_classes(iteration2-1) + iter_dico].item()  # pick actual class
+                for iter_dico in range(self.nb_cl):
+                    cl = self.dataset.order[self.compute_num_classes(iteration2-1) + iter_dico].item()  # pick actual class
 
-                # compute network resposes for images of class cl
-                pinput = self.dataset.get_dataloader_of_class(cl)
-                output = []
-                for img, tar in pinput:
-                    img = img.to(self.device)
-                    output.append(self.network.forward(img).cpu().detach())
+                    # compute network resposes for images of class cl
+                    pinput = self.dataset.get_dataloader_of_class(cl)
+                    output = []
+                    for img, tar in pinput:
+                        img = img.to(self.device)
+                        output.append(self.network.forward(img).cpu().detach())
 
-                # Collect data in the feature space for each class
-                mapped_prototypes = torch.cat(output).numpy()  # should be 500 x 64 in CIFAR
-                D = mapped_prototypes.T  # now each column is a sample # 64 x 500
-                D = D / np.linalg.norm(D, axis=0)   # 64 x 500
+                    # Collect data in the feature space for each class
+                    mapped_prototypes = torch.cat(output).numpy()  # should be 500 x 64 in CIFAR
+                    D = mapped_prototypes.T  # now each column is a sample # 64 x 500
+                    D = D / np.linalg.norm(D, axis=0)   # 64 x 500
 
-                # compute network resposes for images of class cl for flipped images
-                flip = transforms.RandomHorizontalFlip(p=1)
-                pinput = self.dataset.get_dataloader_of_class(cl, flip)
-                output = []
-                for img, tar in pinput:
-                    img = img.to(self.device)
-                    output.append(self.network.forward(img).cpu().detach())
+                    # compute network resposes for images of class cl for flipped images
+                    flip = transforms.RandomHorizontalFlip(p=1)
+                    pinput = self.dataset.get_dataloader_of_class(cl, flip)
+                    output = []
+                    for img, tar in pinput:
+                        img = img.to(self.device)
+                        output.append(self.network.forward(img).cpu().detach())
 
-                mapped_prototypes_flip = torch.cat(output).numpy()  # should be 500 x 64 in CIFAR
-                D2 = mapped_prototypes_flip.T  # now each column is a sample # 64 x 500
-                D2 = D2 / np.linalg.norm(D2, axis=0)   # 64 x 500
+                    mapped_prototypes_flip = torch.cat(output).numpy()  # should be 500 x 64 in CIFAR
+                    D2 = mapped_prototypes_flip.T  # now each column is a sample # 64 x 500
+                    D2 = D2 / np.linalg.norm(D2, axis=0)   # 64 x 500
 
-                # iCaRL
-                alph = self.alpha_dr_herding[cl]  # importance of each image of this class
-                dict_size = len(self.alpha_dr_herding[cl])
-                alph = (alph > 0) * (alph < nb_protos_cl + 1) * 1.  # 1 if in the current herd
+                    # iCaRL
+                    alph = self.alpha_dr_herding[cl]  # importance of each image of this class
+                    dict_size = len(self.alpha_dr_herding[cl])
+                    alph = (alph > 0) * (alph < nb_protos_cl + 1) * 1.  # 1 if in the current herd
 
-                # Handle the case in which there are no prototypes
-                s = np.sum(alph)
-                if s == 0:
-                    s = 1
+                    # Handle the case in which there are no prototypes
+                    s = np.sum(alph)
+                    if s == 0:
+                        s = 1
 
-                alph = alph / s  # to make the average only for the current prototypes.
-                class_means[:, cl, 0] = (np.dot(D, alph))
-                # dot operation is for weighting each f(xi) with alpha
-                class_means[:, cl, 0] /= np.linalg.norm(class_means[:, cl, 0])
+                    alph = alph / s  # to make the average only for the current prototypes.
+                    class_means[:, cl, 0] = (np.dot(D, alph))
+                    # dot operation is for weighting each f(xi) with alpha
+                    class_means[:, cl, 0] /= np.linalg.norm(class_means[:, cl, 0])
 
-                # Inverted ICaRL
-                class_means[:, cl, 2] = (np.dot(D, alph) + np.dot(D2, alph)) / 2
-                # dot operation is for weighting each f(xi) with alpha
-                class_means[:, cl, 2] /= np.linalg.norm(class_means[:, cl, 2])
+                    # Inverted ICaRL
+                    class_means[:, cl, 2] = (np.dot(D, alph) + np.dot(D2, alph)) / 2
+                    # dot operation is for weighting each f(xi) with alpha
+                    class_means[:, cl, 2] /= np.linalg.norm(class_means[:, cl, 2])
 
-                # Normal NCM
-                alph = np.ones(dict_size) / dict_size  # to make the avg over all samples
-                class_means[:, cl, 1] = (np.dot(D, alph))
-                # dot operation is for weighting each f(xi) with alpha
-                class_means[:, cl, 1] /= np.linalg.norm(class_means[:, cl, 1])
+                    # Normal NCM
+                    alph = np.ones(dict_size) / dict_size  # to make the avg over all samples
+                    class_means[:, cl, 1] = (np.dot(D, alph))
+                    # dot operation is for weighting each f(xi) with alpha
+                    class_means[:, cl, 1] /= np.linalg.norm(class_means[:, cl, 1])
 
         return class_means
 

@@ -29,6 +29,8 @@ parser.add_argument('--depth', default=5, type=int, help='Architecture depth')
 # method variables
 parser.add_argument('-m', '--method', default='icarl', help='Method to be tested')
 parser.add_argument('-l', '--log', default=None, help='Method name where are saved logs and results')
+parser.add_argument('-c', '--config_file', default=None, help='Config file where to get parameters for training')
+
 
 args = parser.parse_args()
 
@@ -66,7 +68,7 @@ for run in range(nb_runs):
     # define network
     network = networks.CifarResNet()
     # define the method
-    method = methods.get_method(method_name)(network, log=f"logs/{log}_run{run}")
+    method = methods.get_method(method_name, config=args.config_file, network=network, log=f"logs/{log}_run{run}")
     # run fit!
     acc = method.fit(data, nb_incr, epochs=args.epochs)
 
