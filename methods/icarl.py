@@ -1,11 +1,13 @@
 from torch import tensor
 import torch
+from torchvision import transforms
 import torch.nn as nn
 import torch.optim as optim
 import numpy as np
 import copy
 from datetime import datetime
 from scipy.spatial.distance import cdist
+from .common import *
 
 LR = 2.
 MEM_SIZE = 20*100
@@ -109,6 +111,7 @@ class ICarl:
             print("  top 1 accuracy iCaRL          :\t{:.2f} %".format(acc_cum[0]))
             print("  top 1 accuracy Hybrid 1       :\t{:.2f} %".format(acc_cum[1]))
             print("  top 1 accuracy NCM            :\t{:.2f} %".format(acc_cum[2]))
+            print("  top 1 accuracy iCaRL-INV      :\t{:.2f} %".format(acc_cum[3]))
 
             acc_new = self.test(iteration, means, cumulative=False)
 
@@ -116,6 +119,7 @@ class ICarl:
             print("  top 1 accuracy iCaRL          :\t{:.2f} %".format(acc_new[0]))
             print("  top 1 accuracy Hybrid 1       :\t{:.2f} %".format(acc_new[1]))
             print("  top 1 accuracy NCM            :\t{:.2f} %".format(acc_new[2]))
+            print("  top 1 accuracy iCaRL-INV      :\t{:.2f} %".format(acc_new[3]))
 
             acc_base = self.test(0, means)
 
@@ -123,16 +127,19 @@ class ICarl:
             print("  top 1 accuracy iCaRL          :\t{:.2f} %".format(acc_base[0]))
             print("  top 1 accuracy Hybrid 1       :\t{:.2f} %".format(acc_base[1]))
             print("  top 1 accuracy NCM            :\t{:.2f} %".format(acc_base[2]))
+            print("  top 1 accuracy iCaRL-INV      :\t{:.2f} %".format(acc_base[3]))
 
             cumulative_accuracies.append(acc_cum)
+
+            for i, name in enumerate(["iCaRL", "Hybrid", "NCM", "iCaRL-INV"]):
+                save_results(f"{name}{datetime.now().isoformat()}.csv", acc_base[i], acc_new[i], acc_cum[i])
 
             print("")
 
         torch.save(
             {
-             "network": self.network.state_dict(),
-             "accuracy": cumulative_accuracies
-             },
+             "network": self.network.state_dict()
+            },
             f"models/icarl{datetime.now().isoformat()}.pth"
         )
 
@@ -152,7 +159,7 @@ class ICarl:
             # In each epoch, we do a full pass over the training data:
             for inputs, targets_prep in data_loader:
 
-                targets = np.zeros((inputs.shape[0], 100), np.float32)  # 100 = classes of cifar
+                targets = np.zeros((inputs.shape[0], self.n_classes), np.float32)  # 100 = classes of cifar
                 targets[range(len(targets_prep)), targets_prep.type(torch.int32)] = 1.  # prepare target for CE loss
 
                 inputs = inputs.to(self.device)
@@ -209,7 +216,7 @@ class ICarl:
             acc = 100. * correct / total
 
             if (epoch+1) % (self.epochs//10) == 0:
-                print(f"Epoch {epoch + 1} : Train Loss {train_loss / total:.8f}, Train Acc {acc:.2f}")
+                print(f"Epoch {epoch + 1} : Train Loss {train_loss / len(data_loader):.8f}, Train Acc {acc:.2f}")
 
             # adjust learning rate
             if (epoch + 1) in self.lr_strat:
@@ -291,13 +298,13 @@ class ICarl:
 
     def compute_means(self, iteration):
 
-        class_means = np.zeros((64, 100, 2))
+        class_means = np.zeros((64, 100, 3))
         nb_protos_cl = int(np.ceil(self.mem_size / self.compute_num_classes(iteration)))  # num of exemplars per class
 
         for iteration2 in range(iteration+1):
 
             for iter_dico in range(self.nb_cl):
-                cl = self.dataset.order[self.compute_num_classes(iteration2) + iter_dico].item()  # pick actual class
+                cl = self.dataset.order[self.compute_num_classes(iteration2-1) + iter_dico].item()  # pick actual class
 
                 # compute network resposes for images of class cl
                 pinput = self.dataset.get_dataloader_of_class(cl)
@@ -308,8 +315,20 @@ class ICarl:
 
                 # Collect data in the feature space for each class
                 mapped_prototypes = torch.cat(output).numpy()  # should be 500 x 64 in CIFAR
-                D = mapped_prototypes.T  # now each column is a sample
-                D = D / np.linalg.norm(D, axis=0)
+                D = mapped_prototypes.T  # now each column is a sample # 64 x 500
+                D = D / np.linalg.norm(D, axis=0)   # 64 x 500
+
+                # compute network resposes for images of class cl for flipped images
+                flip = transforms.RandomHorizontalFlip(p=1)
+                pinput = self.dataset.get_dataloader_of_class(cl, flip)
+                output = []
+                for img, tar in pinput:
+                    img = img.to(self.device)
+                    output.append(self.network.forward(img).cpu().detach())
+
+                mapped_prototypes_flip = torch.cat(output).numpy()  # should be 500 x 64 in CIFAR
+                D2 = mapped_prototypes_flip.T  # now each column is a sample # 64 x 500
+                D2 = D2 / np.linalg.norm(D2, axis=0)   # 64 x 500
 
                 # iCaRL
                 alph = self.alpha_dr_herding[cl]  # importance of each image of this class
@@ -326,6 +345,11 @@ class ICarl:
                 # dot operation is for weighting each f(xi) with alpha
                 class_means[:, cl, 0] /= np.linalg.norm(class_means[:, cl, 0])
 
+                # Inverted ICaRL
+                class_means[:, cl, 2] = (np.dot(D, alph) + np.dot(D2, alph)) / 2
+                # dot operation is for weighting each f(xi) with alpha
+                class_means[:, cl, 3] /= np.linalg.norm(class_means[:, cl, 2])
+
                 # Normal NCM
                 alph = np.ones(dict_size) / dict_size  # to make the avg over all samples
                 class_means[:, cl, 1] = (np.dot(D, alph))
@@ -339,11 +363,12 @@ class ICarl:
         if class_means is None and self.mem_size > 0:
             class_means = self.compute_means(iteration)
 
-        top1_acc_list = np.zeros(3)
+        top1_acc_list = np.zeros(4)
 
         stat_hb1 = []
         stat_icarl = []
         stat_ncm = []
+        stat_icarl_i = []
 
         data_loader = self.dataset.test_dataloader(iteration, cumulative=cumulative)
 
@@ -364,11 +389,15 @@ class ICarl:
                 # Compute score for iCaRL
                 sqd = cdist(class_means[:, :, 0].T, outputs, 'sqeuclidean')  # Squared euclidean distance
                 score_icarl = (-sqd).T
+                # Compute score for iCaRL-Inverted
+                sqd = cdist(class_means[:, :, 2].T, outputs, 'sqeuclidean')  # Squared euclidean distance
+                score_icarl_inv = (-sqd).T
                 # Compute score for NCM
                 sqd = cdist(class_means[:, :, 1].T, outputs, 'sqeuclidean')  # Squared euclidean distance
                 score_ncm = (-sqd).T
 
                 stat_icarl += ([ll in best for ll, best in zip(targets_prep, np.argsort(score_icarl, axis=1)[:, -1:])])
+                stat_icarl_i += ([ll in best for ll, best in zip(targets_prep, np.argsort(score_icarl_inv, axis=1)[:, -1:])])
                 stat_ncm += ([ll in best for ll, best in zip(targets_prep, np.argsort(score_ncm, axis=1)[:, -1:])])
 
             stat_hb1 += ([ll in best for ll, best in zip(targets_prep, np.argsort(pred, axis=1)[:, -1:])])
@@ -377,6 +406,7 @@ class ICarl:
         if self.mem_size > 0:
             top1_acc_list[0] = np.average(stat_icarl) * 100.  # ICarl
             top1_acc_list[2] = np.average(stat_ncm) * 100.  # NCM
+            top1_acc_list[3] = np.average(stat_icarl_i) * 100.  # ICaRL inv
 
         top1_acc_list[1] = np.average(stat_hb1) * 100.  # Hybrid 1
 

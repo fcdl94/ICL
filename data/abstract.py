@@ -22,11 +22,11 @@ class AbstractIncrementalDataloader(ABC):
 
     @abstractmethod
     def get_images_of_class(self, idx):
-        # it must return the Images as Tensors (without any transformation)
+        # it must return the Images as PIL (without any transformation)
         raise NotImplementedError
 
     @abstractmethod
-    def get_dataloader_of_class(self, idx):
+    def get_dataloader_of_class(self, idx, custom_transform=None):
         # it must return a DataLoader that returns the images not augmented!
         raise NotImplementedError
 

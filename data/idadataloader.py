@@ -85,7 +85,7 @@ class IDADataloader(AbstractIncrementalDataloader):
 
         return images  # this is a list of PIL images
 
-    def get_dataloader_of_class(self, idx):
+    def get_dataloader_of_class(self, idx, custom_transform=None):
         # select the right dataset
         idx_in_order = np.where(self.order == idx)[0]
 
@@ -97,7 +97,13 @@ class IDADataloader(AbstractIncrementalDataloader):
             target = self.y_target
 
         indices = get_index_of_classes(target, [idx])
-        dataset = Subset(dataset, indices, self.transform)
+
+        if custom_transform is not None:
+            transform = custom_transform
+        else:
+            transform = torchvision.transforms.Compose([custom_transform, self.transform])
+
+        dataset = Subset(dataset, indices, transform)
 
         sampler = torch.utils.data.SequentialSampler(dataset)  # to guarantee sequentiality of indices
 

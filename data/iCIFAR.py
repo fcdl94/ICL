@@ -81,9 +81,15 @@ class ICIFAR(AbstractIncrementalDataloader):
 
         return images  # this is a list of PIL images
 
-    def get_dataloader_of_class(self, idx):
+    def get_dataloader_of_class(self, idx, custom_transform=None):
         indices = get_index_of_classes(self.train_target, [idx])
-        dataset = Subset(self.train_dataset, indices, self.transform)
+
+        if custom_transform is not None:
+            transform = custom_transform
+        else:
+            transform = torchvision.transforms.Compose([custom_transform, self.transform])
+
+        dataset = Subset(self.train_dataset, indices, transform)
 
         sampler = torch.utils.data.SequentialSampler(dataset)  # to guarantee sequentiality of indices
 
