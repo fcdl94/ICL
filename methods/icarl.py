@@ -23,7 +23,8 @@ if torch.cuda.is_available():
 class ICarl:
 
     def __init__(self, network, n_classes=100, mem_size=MEM_SIZE,
-                 lr_init=LR, decay=DECAY, epochs=EPOCHS, device=DEVICE):
+                 lr_init=LR, decay=DECAY, epochs=EPOCHS, device=DEVICE,
+                 log="ICARL"):
         """
         :param network: the backbone neural network of the model
         :param n_classes: Number of classes of the dataset
@@ -52,6 +53,8 @@ class ICarl:
         self.lr_factor = LR_FACTOR
 
         self.prototypes = None
+        self.log_folder = log
+        create_log_folder(log)
 
         self.alpha_dr_herding = [np.array([0]) for i in range(n_classes)]
 
@@ -132,7 +135,8 @@ class ICarl:
             cumulative_accuracies.append(acc_cum)
 
             for i, name in enumerate(["iCaRL", "Hybrid", "NCM", "iCaRL-INV"]):
-                save_results(f"{name}{datetime.now().isoformat()}.csv", acc_base[i], acc_new[i], acc_cum[i])
+                save_results(f"{self.log_folder}/{name}{datetime.now().isoformat()}.csv",
+                             acc_base[i], acc_new[i], acc_cum[i])
 
             print("")
 

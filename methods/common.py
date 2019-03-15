@@ -9,3 +9,8 @@ def save_results(file, acc_base, acc_new, acc_cum):
         if print_header:
             f.write("acc_base,acc_new,acc_cum")
         f.write(f"{acc_base},{acc_new},{acc_cum}")
+
+
+def create_log_folder(log):
+    if not os.path.isdir(log):
+        os.mkdir(log)
