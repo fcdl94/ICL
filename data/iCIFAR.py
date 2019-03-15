@@ -84,8 +84,8 @@ class ICIFAR(AbstractIncrementalDataloader):
     def get_dataloader_of_class(self, idx, custom_transform=None):
         indices = get_index_of_classes(self.train_target, [idx])
 
-        if custom_transform is not None:
-            transform = custom_transform
+        if custom_transform is None:
+            transform = self.transform
         else:
             transform = torchvision.transforms.Compose([custom_transform, self.transform])
 

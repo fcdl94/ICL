@@ -1,5 +1,7 @@
 from .icarl import ICarl
 
+methods = ["icarl"]
+
 
 def get_method(name):
     if name.lower() == 'ICarl'.lower():

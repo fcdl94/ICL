@@ -7,8 +7,8 @@ def save_results(file, acc_base, acc_new, acc_cum):
         print_header = True
     with open(file, "a") as f:
         if print_header:
-            f.write("acc_base,acc_new,acc_cum")
-        f.write(f"{acc_base},{acc_new},{acc_cum}")
+            f.write("acc_base,acc_new,acc_cum\n")
+        f.write(f"{acc_base},{acc_new},{acc_cum}\n")
 
 
 def create_log_folder(log):

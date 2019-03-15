@@ -98,8 +98,8 @@ class IDADataloader(AbstractIncrementalDataloader):
 
         indices = get_index_of_classes(target, [idx])
 
-        if custom_transform is not None:
-            transform = custom_transform
+        if custom_transform is None:
+            transform = self.transform
         else:
             transform = torchvision.transforms.Compose([custom_transform, self.transform])
 

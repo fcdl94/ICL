@@ -22,7 +22,8 @@ if torch.cuda.is_available():
 
 class ICarl:
 
-    def __init__(self, network, n_classes=100, mem_size=MEM_SIZE,
+    def __init__(self, network, n_classes=100,
+                 mem_size=MEM_SIZE,
                  lr_init=LR, decay=DECAY, epochs=EPOCHS, device=DEVICE,
                  log="ICARL"):
         """
@@ -135,7 +136,7 @@ class ICarl:
             cumulative_accuracies.append(acc_cum)
 
             for i, name in enumerate(["iCaRL", "Hybrid", "NCM", "iCaRL-INV"]):
-                save_results(f"{self.log_folder}/{name}{datetime.now().isoformat()}.csv",
+                save_results(f"{self.log_folder}/{name}.csv",
                              acc_base[i], acc_new[i], acc_cum[i])
 
             print("")
@@ -219,15 +220,14 @@ class ICarl:
 
             acc = 100. * correct / total
 
-            if (epoch+1) % (self.epochs//10) == 0:
-                print(f"Epoch {epoch + 1} : Train Loss {train_loss / len(data_loader):.8f}, Train Acc {acc:.2f}")
+            print(f"Epoch {epoch + 1:3d} : Train Loss {train_loss / len(data_loader):.6f}, Train Acc {acc:.2f}")
 
             # adjust learning rate
             if (epoch + 1) in self.lr_strat:
                 new_lr = new_lr / self.lr_factor
                 print("New LR:" + str(new_lr))
-                optimizer = optim.SGD(filter(lambda p: p.requires_grad, self.network.parameters()), lr=new_lr, momentum=0.9,
-                                      weight_decay=self.decay, nesterov=False)
+                optimizer = optim.SGD(filter(lambda p: p.requires_grad, self.network.parameters()), lr=new_lr,
+                                      momentum=0.9, weight_decay=self.decay, nesterov=False)
 
         # Duplicate current network to distillate info
         self.network2 = copy.deepcopy(self.network)
@@ -352,7 +352,7 @@ class ICarl:
                 # Inverted ICaRL
                 class_means[:, cl, 2] = (np.dot(D, alph) + np.dot(D2, alph)) / 2
                 # dot operation is for weighting each f(xi) with alpha
-                class_means[:, cl, 3] /= np.linalg.norm(class_means[:, cl, 2])
+                class_means[:, cl, 2] /= np.linalg.norm(class_means[:, cl, 2])
 
                 # Normal NCM
                 alph = np.ones(dict_size) / dict_size  # to make the avg over all samples
