@@ -1,0 +1,145 @@
+from .common import *
+from datetime import datetime
+import torch
+import torch.optim as optim
+import torch.nn as nn
+
+LR = 2.
+DECAY = 0.00001
+EPOCHS = 70
+LR_FACTOR = 5.
+
+DEVICE = 'cpu'
+if torch.cuda.is_available():
+    DEVICE = 'cuda'
+
+
+class FineTuning(AbstractMethod):
+
+    def __init__(self, network, n_classes, nb_base, nb_incr, log="FT", lr=LR, decay=DECAY, device=DEVICE):
+        super().__init__(network, n_classes, nb_base, nb_incr, log)
+        self.lr = lr
+        self.decay = decay
+        self.momentum = 0.9
+        self.device = device
+        self.loss = nn.CrossEntropyLoss()
+
+    def fit(self, dataset, checkpoint=None, epochs=None):
+        if epochs is not None:
+            self.epochs = epochs
+
+        start_iter = 0
+        cumulative_accuracies = []
+        self.dataset = dataset
+
+        if checkpoint is not None:
+            check_dict = torch.load(checkpoint)
+            start_iter = check_dict['iteration']
+            self.network.load_state_dict(check_dict['network'])
+
+        for iteration in range(start_iter, self.iteration_total):
+
+            # Prepare the training data for the current batch of classes
+            data_loader = dataset.next_iteration()
+
+            # TRAIN THIS ITERATION #
+            print('Batch of classes number {0} arrives ...'.format(iteration + 1))
+
+            self.incremental_fit(iteration, data_loader)  # train for N epochs (after each epoch validate)
+
+            # END OF TRAINING FOR THIS ITERATION #
+
+            # Save training checkpoint
+            torch.save({
+                'iteration': iteration,
+                'network': self.network.state_dict(),
+            }, "checkpoint/iter_" + str(iteration) + "_checkpoint.pth.tar")
+
+            # COMPUTE ACCURACY ##
+            acc_cum = self.test(iteration)
+            acc_new = self.test(iteration, cumulative=False)
+            acc_base = self.test(0)
+
+            print_accuracy(["FT"], acc_base, acc_new, acc_cum)
+
+            cumulative_accuracies.append(acc_cum)
+
+            i = 0
+            name = 'FT'
+            save_results(f"{self.log_folder}/{name}.csv", acc_base[i], acc_new[i], acc_cum[i])
+
+            print("")
+
+        acc_cum = []
+        tot = self.iteration_total - 1
+
+        for i in range(tot+1):
+            acc_cum.append(self.test(i, cumulative=False))
+
+        save_per_batch_result(f"{self.log_folder}/per-batch.csv", ["FT"], acc_cum)
+
+        torch.save(
+            {
+                "network": self.network.state_dict()
+            },
+            f"models/FT{datetime.now().isoformat()}.pth"
+            )
+
+        return cumulative_accuracies
+
+    def incremental_fit(self, iteration, data_loader):
+        optimizer = optim.SGD(self.network.parameters(), lr=self.lr, momentum=self.momentum, weight_decay=self.decay)
+
+        for epoch in range(self.epochs):
+            self.network.train()
+            train_loss = 0
+            correct = 0
+            total = 0
+
+            # In each epoch, we do a full pass over the training data:
+            for inputs, targets in data_loader:
+
+                inputs = inputs.to(self.device)
+                targets = torch.tensor(targets).to(self.device)
+
+                outputs = self.network.forward(inputs)  # feature vector only
+                prediction = self.network.predict(outputs)  # make the prediction
+
+                loss_bx = self.loss(prediction, targets)  # CE loss
+                loss_bx.backward()
+                optimizer.step()
+
+                train_loss += loss_bx.item()
+                _, predicted = prediction.max(1)
+                total += targets.size(0)
+                correct += predicted.eq(targets).sum().item()
+
+            acc = 100. * correct / total
+
+            print(f"Epoch {epoch + 1:3d} : Train Loss {train_loss / len(data_loader):.6f}, Train Acc {acc:.2f}")
+
+    def predict(self, inputs):
+        inputs = inputs.to(self.device)
+        # compute prediction
+        outputs = self.network.forward(inputs)  # returns embeddings
+        prediction = self.network.predict(outputs).cpu().detach().numpy()  # return score classes as logits
+
+        return prediction.cpu().detach()
+
+    def test(self, iteration, cumulative=True,):
+        data_loader = self.dataset.test_dataloader(iteration, cumulative=cumulative)
+        correct = 0
+        total = 0
+
+        for inputs, targets in data_loader:
+            inputs = inputs.to(self.device)
+
+            # compute prediction
+            outputs = self.network.forward(inputs)  # returns embeddings
+            prediction = self.network.predict(outputs).cpu().detach().numpy()  # return score classes as logits
+
+            _, predicted = prediction.max(1)
+            total += targets.size(0)
+            correct += predicted.eq(targets).sum().item()
+
+        return [100. * correct / total]

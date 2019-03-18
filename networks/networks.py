@@ -250,9 +250,6 @@ class CifarResNet(nn.Module):
 
         return x
 
-    def update_means(self, x, y):
-        self.linear.update_means(x, y)
-
     def predict(self, x):
         out = self.linear(x)
         return out
@@ -390,8 +387,8 @@ class ResNet_iNCM(nn.Module):
         self.linear.init_from_labels(y)
 
 
-def ResNet18():
-    return ResNet(BasicBlock, [2, 2, 2, 2])
+def ResNet18(classes=100):
+    return ResNet(BasicBlock, [2, 2, 2, 2], num_classes=classes)
 
 
 def ResNet18_NCM():

@@ -10,60 +10,59 @@ from scipy.spatial.distance import cdist
 from .common import *
 
 LR = 2.
-MEM_SIZE = 20*100
+MEM_SIZE = 20 * 100
 DECAY = 0.00001
 EPOCHS = 70
 LR_FACTOR = 5.
+METHODS = ["iCaRL", "Hybrid", "NCM", "iCaRL-INV"]
 
 DEVICE = 'cpu'
 if torch.cuda.is_available():
     DEVICE = 'cuda'
 
 
-class ICarl:
+class ICarl(AbstractMethod):
 
-    def __init__(self, network, n_classes=100,
-                 mem_size=MEM_SIZE,
-                 lr_init=LR, decay=DECAY, epochs=EPOCHS, device=DEVICE,
-                 log="ICARL"):
+    def __init__(self, network, n_classes=100, nb_base=10, nb_incr=10,
+                 mem_size=MEM_SIZE, distillation=True,
+                 lr_init=LR, decay=DECAY, epochs=EPOCHS, device=DEVICE, log="ICARL"):
         """
         :param network: the backbone neural network of the model
         :param n_classes: Number of classes of the dataset
-        :param dictionary_size: Number of example in each class (must be equal for all classes)
         :param mem_size: Number of prototypes to be stored
         :param lr_init: Initial learning rate (decayed by 5 after 0.7 and 0.9 epochs
         :param decay: weight decay for SGD
         :param epochs: number of epochs to train the model
         :param device: "cuda" or "cpu"
         """
+        super().__init__(network=network, n_classes=n_classes, nb_base=nb_base, nb_incr=nb_incr, log="ICARL")
+
         self.network = network.to(device)
         self.network2 = self.network
 
         self.loss = nn.BCEWithLogitsLoss(reduction='mean')
 
-        self.device = device
         self.dataset = None
-        self.nb_cl = None
 
-        self.lr_init = lr_init
+        # method parameters
         self.mem_size = mem_size
-        self.n_classes = n_classes
-        self.decay = decay
-        self.epochs = epochs
-        self.lr_strat = [round(epochs*0.7), round(epochs*0.9)]
-        self.lr_factor = LR_FACTOR
-
+        self.distillation = distillation
         self.prototypes = None
-        self.log_folder = log
-        create_log_folder(log)
-
         self.alpha_dr_herding = [np.array([0]) for i in range(n_classes)]
 
-    def fit(self, dataset, nb_cl, checkpoint=None, epochs=None):
+        # training parameters
+        self.device = device
+        self.lr_init = lr_init
+        self.decay = decay
+        self.epochs = epochs
+        self.lr_strat = [round(epochs * 0.7), round(epochs * 0.9)]
+        self.lr_factor = LR_FACTOR
+
+    def fit(self, dataset, checkpoint=None, epochs=None):
 
         self.alpha_dr_herding = [np.array([0]) for i in range(self.n_classes)]
         self.dataset = dataset
-        self.nb_cl = nb_cl
+
         if epochs is not None:
             self.epochs = epochs
 
@@ -82,7 +81,7 @@ class ICarl:
             x_protoset = check_dict['X']
             y_protoset = check_dict['Y']
 
-        for iteration in range(start_iter, self.n_classes // nb_cl):
+        for iteration in range(start_iter, self.iteration_total):
 
             # Prepare the training data for the current batch of classes
             data_loader = dataset.next_iteration(x_protoset, y_protoset)
@@ -107,57 +106,49 @@ class ICarl:
                 'Y': y_protoset
             }, "checkpoint/iter_" + str(iteration) + "_checkpoint.pth.tar")
 
-            means = self.compute_means(iteration)
             # COMPUTE ACCURACY ##
-            acc_cum = self.test(iteration, means)
+            means = self.compute_means(iteration)
+            acc_cum = self.test(iteration, class_means=means)
+            acc_new = self.test(iteration, class_means=means, cumulative=False)
+            acc_base = self.test(0, class_means=means)
 
-            print("Cumulative results")
-            print("  top 1 accuracy iCaRL          :\t{:.2f} %".format(acc_cum[0]))
-            print("  top 1 accuracy Hybrid 1       :\t{:.2f} %".format(acc_cum[1]))
-            print("  top 1 accuracy NCM            :\t{:.2f} %".format(acc_cum[2]))
-            print("  top 1 accuracy iCaRL-INV      :\t{:.2f} %".format(acc_cum[3]))
-
-            acc_new = self.test(iteration, means, cumulative=False)
-
-            print("New batch results")
-            print("  top 1 accuracy iCaRL          :\t{:.2f} %".format(acc_new[0]))
-            print("  top 1 accuracy Hybrid 1       :\t{:.2f} %".format(acc_new[1]))
-            print("  top 1 accuracy NCM            :\t{:.2f} %".format(acc_new[2]))
-            print("  top 1 accuracy iCaRL-INV      :\t{:.2f} %".format(acc_new[3]))
-
-            acc_base = self.test(0, means)
-
-            print("First batch results")
-            print("  top 1 accuracy iCaRL          :\t{:.2f} %".format(acc_base[0]))
-            print("  top 1 accuracy Hybrid 1       :\t{:.2f} %".format(acc_base[1]))
-            print("  top 1 accuracy NCM            :\t{:.2f} %".format(acc_base[2]))
-            print("  top 1 accuracy iCaRL-INV      :\t{:.2f} %".format(acc_base[3]))
+            print_accuracy(METHODS, acc_base, acc_new, acc_cum)
 
             cumulative_accuracies.append(acc_cum)
 
-            for i, name in enumerate(["iCaRL", "Hybrid", "NCM", "iCaRL-INV"]):
+            for i, name in enumerate(METHODS):
                 save_results(f"{self.log_folder}/{name}.csv",
                              acc_base[i], acc_new[i], acc_cum[i])
 
-            print("")
+        acc_cum = []
+        tot = self.iteration_total - 1
+        means = self.compute_means(tot)
+        for i in range(tot+1):
+            acc_cum.append(self.test(i, cumulative=False, class_means=means))
 
-        means = self.compute_means(9)
-        for i in range(10):
-            acc_cum = self.test(i, means, cumulative=False)
-
-            print(f"Batch {i + 1}")
-            print("  top 1 accuracy iCaRL          :\t{:.2f} %".format(acc_cum[0]))
-            print("  top 1 accuracy Hybrid 1       :\t{:.2f} %".format(acc_cum[1]))
-            print("  top 1 accuracy NCM            :\t{:.2f} %".format(acc_cum[2]))
+        save_per_batch_result(f"{self.log_folder}/per-batch.csv",
+                                           ["iCaRL", "Hybrid", "NCM", "iCaRL-INV"], acc_cum)
 
         torch.save(
             {
-             "network": self.network.state_dict()
+                "network": self.network.state_dict()
             },
             f"models/icarl{datetime.now().isoformat()}.pth"
         )
 
         return cumulative_accuracies
+
+    def compute_num_classes(self, iteration):
+        if iteration < 0:
+            return 0
+        return self.nb_base + self.nb_incr * iteration
+
+    def nb_classes(self, iteration):
+        if iteration > 0:
+            nb_cl = self.nb_incr
+        else:
+            nb_cl = self.nb_base
+        return nb_cl
 
     def incremental_fit(self, iteration, data_loader):
         new_lr = self.lr_init
@@ -184,11 +175,12 @@ class ICarl:
                 targets = tensor(targets).to(outputs.device)
                 targets_prep = torch.LongTensor(targets_prep).to(outputs.device)
 
-                if iteration > 0:  # apply distillation
+                if iteration > 0 and self.distillation:  # apply distillation
                     outputs_old = self.network2.forward(inputs)
                     prediction_old = self.network2.predict(outputs_old)
-                    targets[:, np.array(self.dataset.order[range(0, iteration * self.nb_cl)])] = \
-                        torch.sigmoid(prediction_old[:, np.array(self.dataset.order[range(0, iteration * self.nb_cl)])])
+                    to = self.compute_num_classes(iteration-1)  # until the number of classes of last iteration
+                    targets[:, np.array(self.dataset.order[range(0, to)])] = \
+                        torch.sigmoid(prediction_old[:, np.array(self.dataset.order[range(0, to)])])
 
                 loss_bx = self.loss(prediction, targets)  # joins classification and distillation losses
                 loss_bx.backward()
@@ -199,7 +191,7 @@ class ICarl:
                 total += targets.size(0)
                 correct += predicted.eq(targets_prep).sum().item()
 
-            # END loop minibatches
+            # if VALIDATION:
             # self.network.eval()
             # test_loss = 0
             # correct = 0
@@ -243,7 +235,7 @@ class ICarl:
         self.network2.eval()
 
     def update_exemplars(self, iteration):
-        nb_protos_cl = int(np.ceil(self.mem_size / self.nb_cl / (iteration + 1)))  # num of exemplars per class
+        nb_protos_cl = self.mem_size // self.compute_num_classes(iteration)  # num of exemplars per class
         # Herding
         self.network.eval()
 
@@ -253,8 +245,8 @@ class ICarl:
 
         if nb_protos_cl > 0:
 
-            for iter_dico in range(self.nb_cl):
-                cl = self.dataset.order[iteration * self.nb_cl + iter_dico].item()
+            for iter_dico in range(self.nb_classes(iteration)):
+                cl = self.dataset.order[self.compute_num_classes(iteration-1) + iter_dico].item()
 
                 # per controllare che sia in ordine, qui si potrebbe prendere classi e mapparle
                 pinput = self.dataset.get_dataloader_of_class(cl)
@@ -293,8 +285,9 @@ class ICarl:
             # Storing the selected exemplars in the protoset
             for iteration2 in range(iteration + 1):
 
-                for iter_dico in range(self.nb_cl):
-                    cl = self.dataset.order[iteration2 * self.nb_cl + iter_dico].item()
+                for iter_dico in range(self.nb_classes(iteration2)):
+                    # pick actual class
+                    cl = self.dataset.order[self.compute_num_classes(iteration2-1) + iter_dico].item()
 
                     alph = self.alpha_dr_herding[cl]  # select the herd of the current class
                     alph = (alph > 0) * (alph < nb_protos_cl + 1) * 1.  # put one in the ones to select
@@ -306,19 +299,17 @@ class ICarl:
 
         return x_protoset, y_protoset
 
-    def compute_num_classes(self, iteration):
-        return self.nb_cl * (iteration + 1)
-
     def compute_means(self, iteration):
 
         class_means = np.zeros((64, 100, 3))
-        nb_protos_cl = int(np.ceil(self.mem_size / self.compute_num_classes(iteration)))  # num of exemplars per class
+        nb_protos_cl = self.mem_size // self.compute_num_classes(iteration)  # num of exemplars per class
 
         if nb_protos_cl > 0:
-            for iteration2 in range(iteration+1):
+            for iteration2 in range(iteration + 1):
 
-                for iter_dico in range(self.nb_cl):
-                    cl = self.dataset.order[self.compute_num_classes(iteration2-1) + iter_dico].item()  # pick actual class
+                for iter_dico in range(self.nb_classes(iteration2)):
+                    # pick actual class
+                    cl = self.dataset.order[self.compute_num_classes(iteration2 - 1) + iter_dico].item()
 
                     # compute network resposes for images of class cl
                     pinput = self.dataset.get_dataloader_of_class(cl)
@@ -330,7 +321,7 @@ class ICarl:
                     # Collect data in the feature space for each class
                     mapped_prototypes = torch.cat(output).numpy()  # should be 500 x 64 in CIFAR
                     D = mapped_prototypes.T  # now each column is a sample # 64 x 500
-                    D = D / np.linalg.norm(D, axis=0)   # 64 x 500
+                    D = D / np.linalg.norm(D, axis=0)  # 64 x 500
 
                     # compute network resposes for images of class cl for flipped images
                     flip = transforms.RandomHorizontalFlip(p=1)
@@ -342,7 +333,7 @@ class ICarl:
 
                     mapped_prototypes_flip = torch.cat(output).numpy()  # should be 500 x 64 in CIFAR
                     D2 = mapped_prototypes_flip.T  # now each column is a sample # 64 x 500
-                    D2 = D2 / np.linalg.norm(D2, axis=0)   # 64 x 500
+                    D2 = D2 / np.linalg.norm(D2, axis=0)  # 64 x 500
 
                     # iCaRL
                     alph = self.alpha_dr_herding[cl]  # importance of each image of this class
@@ -372,7 +363,7 @@ class ICarl:
 
         return class_means
 
-    def test(self, iteration, class_means=None, cumulative=True):
+    def test(self, iteration, cumulative=True, class_means=None):
 
         if class_means is None and self.mem_size > 0:
             class_means = self.compute_means(iteration)
@@ -411,7 +402,8 @@ class ICarl:
                 score_ncm = (-sqd).T
 
                 stat_icarl += ([ll in best for ll, best in zip(targets_prep, np.argsort(score_icarl, axis=1)[:, -1:])])
-                stat_icarl_i += ([ll in best for ll, best in zip(targets_prep, np.argsort(score_icarl_inv, axis=1)[:, -1:])])
+                stat_icarl_i += (
+                [ll in best for ll, best in zip(targets_prep, np.argsort(score_icarl_inv, axis=1)[:, -1:])])
                 stat_ncm += ([ll in best for ll, best in zip(targets_prep, np.argsort(score_ncm, axis=1)[:, -1:])])
 
             stat_hb1 += ([ll in best for ll, best in zip(targets_prep, np.argsort(pred, axis=1)[:, -1:])])
@@ -431,20 +423,24 @@ class ICarl:
         :return the predicted class for the inputs as tensor in cpu
 
         :param inputs: tensors to be evaluated
-        :param method: 0 (def) is ICaRL, 1 is NCM, 2 is ICaRL-inv, 3 is with sigmoid
+        :param method: 0 (def) is ICaRL, 1 is NCM, 2 is ICaRL-inv, 3 is with sigmoid (Hybrid 1)
         """
-        class_means = self.compute_means(self.n_classes // self.nb_cl)
-        outputs = self.network.forward(inputs)  # returns embeddings
-        if method == 3:
-            pred = self.network.predict(outputs).cpu().detach()
-        elif 0 <= method < 3:
-            outputs = outputs.cpu().detach().numpy()
-            outputs = (outputs.T / np.linalg.norm(outputs.T, axis=0)).T  # normalize output
-            sqd = cdist(class_means[:, :, method].T, outputs, 'sqeuclidean')  # Squared euclidean distance
-            score = (-sqd).T
-            pred = np.argsort(score, axis=1)[:, -1:]
-            pred = torch.tensor(pred)
+
+        if self.iteration_total > 0 and 0 <= method <= 3:
+
+            class_means = self.compute_means(self.iteration_total-1)
+            outputs = self.network.forward(inputs)  # returns embeddings
+
+            if method == 3:
+                pred = self.network.predict(outputs).cpu().detach()
+            elif 0 <= method < 3:
+                outputs = outputs.cpu().detach().numpy()
+                outputs = (outputs.T / np.linalg.norm(outputs.T, axis=0)).T  # normalize output
+                sqd = cdist(class_means[:, :, method].T, outputs, 'sqeuclidean')  # Squared euclidean distance
+                score = (-sqd).T
+                pred = np.argsort(score, axis=1)[:, -1:]
+                pred = torch.tensor(pred)
+
+            return pred
         else:
             raise Exception("Pass method between 0 and 3 inclusive")
-
-        return pred

@@ -48,6 +48,9 @@ class ICIFAR(AbstractIncrementalDataloader):
         self.num_cl_first = num_cl_first
         self.num_cl_after = num_cl_after
 
+        if num_cl_after == 0:
+            num_cl_after = 1
+
         assert (100 - self.num_cl_first) % num_cl_after == 0, \
             "num_cl_after + N*num_cl_after must match the number of classes"
         self.num_iteration_max = 1 + (100 - num_cl_first) // num_cl_after
