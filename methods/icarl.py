@@ -35,7 +35,7 @@ class ICarl(AbstractMethod):
         :param epochs: number of epochs to train the model
         :param device: "cuda" or "cpu"
         """
-        super().__init__(network=network, n_classes=n_classes, nb_base=nb_base, nb_incr=nb_incr, log="ICARL")
+        super().__init__(network=network, n_classes=n_classes, nb_base=nb_base, nb_incr=nb_incr, log=log)
 
         self.network = network.to(device)
         self.network2 = self.network
@@ -98,13 +98,13 @@ class ICarl(AbstractMethod):
             x_protoset, y_protoset = self.update_exemplars(iteration)
 
             # Save training checkpoint
-            torch.save({
-                'iteration': iteration,
-                'network': self.network.state_dict(),
-                'network2': self.network2.state_dict(),
-                'X': x_protoset,
-                'Y': y_protoset
-            }, "checkpoint/iter_" + str(iteration) + "_checkpoint.pth.tar")
+            # torch.save({
+            #    'iteration': iteration,
+            #    'network': self.network.state_dict(),
+            #    'network2': self.network2.state_dict(),
+            #    'X': x_protoset,
+            #    'Y': y_protoset
+            # }, "checkpoint/iter_" + str(iteration) + "_checkpoint.pth.tar")
 
             # COMPUTE ACCURACY ##
             means = self.compute_means(iteration)

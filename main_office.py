@@ -32,7 +32,7 @@ parser.add_argument('--order', default=None, help='Order file path')
 parser.add_argument('--from_run', default=0, help='The first run (order of classes) to be evaluated')
 
 # network variables
-parser.add_argument('--depth', default=5, type=int, help='Architecture depth')
+parser.add_argument('--pretrained', default=False, type=bool, help='If start with ImageNet pretraining or not')
 
 # method variables
 parser.add_argument('-m', '--method', default='icarl', help='Method to be tested')
@@ -42,7 +42,7 @@ parser.add_argument('-c', '--config_file', default=None, help='Config file where
 args = parser.parse_args()
 
 batch_size = args.batch_size  # Batch size
-n = args.depth  # Set the depth of the architecture: n = 5 -> 32 layers (See He et al. paper)
+
 nb_base = args.num_base_classes  # Base classes per group (first iteration)
 nb_incr = args.num_incremental_classes
 
@@ -60,16 +60,20 @@ else:
 torch.manual_seed(42)
 
 # create the transforms
-# Normalize to have range between -1,1 : (x - 0.5) * 2
-transform = transforms.Compose([transforms.Resize((32, 32)),
-                                transforms.ToTensor(),
-                                transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])])
-# Create data augmentation transform
-augmentation = transforms.Compose([transforms.Resize((32, 32)),
-                                   transforms.RandomHorizontalFlip(),
-                                   transforms.RandomCrop((32, 32), padding=4)])
+# normalization of ImageNet
+normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                 std=[0.229, 0.224, 0.225])
 
-for run in range(args.from_run, nb_runs):
+# Normalize to have range between -1,1 : (x - 0.5) * 2
+transform = transforms.Compose([transforms.Resize((224, 224)),
+                                transforms.ToTensor(),
+                                normalize])
+# Create data augmentation transform
+augmentation = transforms.Compose([transforms.Resize(250),
+                                   transforms.RandomHorizontalFlip(),
+                                   transforms.RandomCrop((224, 224))])
+
+for run in range(int(args.from_run), nb_runs):
     # get the data
     source = ImageFolder(args.root + "/" + args.source, None, None)
     target = ImageFolder(args.root + "/" + args.target, None, None)
@@ -79,10 +83,10 @@ for run in range(args.from_run, nb_runs):
                          augmentation=augmentation, transform=transform,
                          batch_size=batch_size, run_number=run, workers=8)
     # define network
-    network = networks.CifarResNet()
+    network = networks.resnet18(pretrained=args.pretrained, num_classes=65)
     # define the method
     method = methods.get_method(method_name, config=args.config_file, network=network, n_classes=65,
                                 nb_base=nb_base, nb_incr=nb_incr,
-                                log=f"logs/office/{log}/run{run}", lr_init=4)
+                                log=f"logs/office/{log}/run{run}")
     # run fit!
-    acc = method.fit()
+    acc = method.fit(data, epochs=args.epochs)

@@ -33,6 +33,8 @@ parser.add_argument('--depth', default=5, type=int, help='Architecture depth')
 parser.add_argument('-m', '--method', default='icarl', help='Method to be tested')
 parser.add_argument('-l', '--log', default=None, help='Method name where are saved logs and results')
 parser.add_argument('-c', '--config_file', default=None, help='Config file where to get parameters for training')
+parser.add_argument('--seed', default=42, help='The random seed to use')
+
 
 args = parser.parse_args()
 
@@ -54,7 +56,7 @@ else:
 # now start with the main
 
 # fix for reproducibility
-torch.manual_seed(42)
+torch.manual_seed(args.seed)
 
 # create the transforms
 # Normalize to have range between -1,1 : (x - 0.5) * 2
@@ -63,7 +65,7 @@ transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize([0.5
 augmentation = transforms.Compose([transforms.RandomHorizontalFlip(),
                                    transforms.RandomCrop((32, 32), padding=4)])
 
-for run in range(args.from_run, nb_runs):
+for run in range(int(args.from_run), nb_runs):
     print(f"Starting with run {run}...")
     # get the data
     data = ICIFAR(args.root, download=False,
@@ -71,8 +73,8 @@ for run in range(args.from_run, nb_runs):
                   augmentation=augmentation, transform=transform,
                   batch_size=batch_size, run_number=run, workers=8)
     # define network
-    network = networks.CifarResNet(depth=depth*6 + 2, num_classes=65)
+    network = networks.CifarResNet(depth=depth*6 + 2)
     # define the method
     method = methods.get_method(method_name, config=args.config_file, network=network, log=f"logs/cifar/{log}/run{run}")
     # run fit!
-    acc = method.fit()
+    acc = method.fit(data, epochs=args.epochs)
