@@ -1,0 +1,8 @@
+{
+  "lr_init": 0.01,
+  "decay": 0.0001,
+  "epochs": 70,
+  "factor": 10.0,
+  "device": "cuda",
+  "name":"FT"
+}

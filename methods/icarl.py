@@ -25,7 +25,7 @@ class ICarl(AbstractMethod):
 
     def __init__(self, network, n_classes=100, nb_base=10, nb_incr=10,
                  mem_size=MEM_SIZE, distillation=True,
-                 lr_init=LR, decay=DECAY, epochs=EPOCHS, device=DEVICE, log="ICARL"):
+                 lr_init=LR, decay=DECAY, epochs=EPOCHS, device=DEVICE, log="ICARL", name="ICARL"):
         """
         :param network: the backbone neural network of the model
         :param n_classes: Number of classes of the dataset
@@ -35,7 +35,7 @@ class ICarl(AbstractMethod):
         :param epochs: number of epochs to train the model
         :param device: "cuda" or "cpu"
         """
-        super().__init__(network=network, n_classes=n_classes, nb_base=nb_base, nb_incr=nb_incr, log=log)
+        super().__init__(network=network, n_classes=n_classes, nb_base=nb_base, nb_incr=nb_incr, log=log, name=name)
 
         self.network = network.to(device)
         self.network2 = self.network

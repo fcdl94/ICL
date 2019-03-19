@@ -2,10 +2,11 @@ from .common import *
 from datetime import datetime
 import torch
 import torch.optim as optim
+from torch.optim.lr_scheduler import MultiStepLR
 import torch.nn as nn
 
-LR = 2.
-DECAY = 0.00001
+LR = 0.01
+DECAY = 0.0001
 EPOCHS = 70
 LR_FACTOR = 5.
 
@@ -16,13 +17,21 @@ if torch.cuda.is_available():
 
 class FineTuning(AbstractMethod):
 
-    def __init__(self, network, n_classes, nb_base, nb_incr, log="FT", lr=LR, decay=DECAY, device=DEVICE):
-        super().__init__(network, n_classes, nb_base, nb_incr, log)
-        self.lr = lr
+    def __init__(self, network, n_classes, nb_base, nb_incr,
+                 log="FT", name="FT", epochs=EPOCHS, factor=LR_FACTOR,
+                 lr_init=LR, decay=DECAY, device=DEVICE):
+
+        super().__init__(network, n_classes, nb_base, nb_incr, log, name)
+
+        self.lr = lr_init
         self.decay = decay
         self.momentum = 0.9
         self.device = device
         self.loss = nn.CrossEntropyLoss()
+        self.epochs = epochs
+        self.factor = 1/factor
+
+        self.network.to(device)
 
     def fit(self, dataset, checkpoint=None, epochs=None):
         if epochs is not None:
@@ -88,10 +97,13 @@ class FineTuning(AbstractMethod):
         return cumulative_accuracies
 
     def incremental_fit(self, iteration, data_loader):
-        optimizer = optim.SGD(self.network.parameters(), lr=self.lr, momentum=self.momentum, weight_decay=self.decay)
+        optimizer = optim.SGD(filter(lambda p: p.requires_grad, self.network.parameters()),
+                              lr=self.lr, momentum=self.momentum, weight_decay=self.decay)
+        scheduler = MultiStepLR(optimizer, [int(0.7*self.epochs), int(0.9*self.epochs)], self.factor)
 
         for epoch in range(self.epochs):
             self.network.train()
+            scheduler.step()
             train_loss = 0
             correct = 0
             total = 0
@@ -99,8 +111,9 @@ class FineTuning(AbstractMethod):
             # In each epoch, we do a full pass over the training data:
             for inputs, targets in data_loader:
 
+                optimizer.zero_grad()
                 inputs = inputs.to(self.device)
-                targets = torch.tensor(targets).to(self.device)
+                targets = targets.to(self.device)
 
                 outputs = self.network.forward(inputs)  # feature vector only
                 prediction = self.network.predict(outputs)  # make the prediction
@@ -126,7 +139,7 @@ class FineTuning(AbstractMethod):
 
         return prediction.cpu().detach()
 
-    def test(self, iteration, cumulative=True,):
+    def test(self, iteration, cumulative=True):
         data_loader = self.dataset.test_dataloader(iteration, cumulative=cumulative)
         correct = 0
         total = 0
@@ -136,7 +149,7 @@ class FineTuning(AbstractMethod):
 
             # compute prediction
             outputs = self.network.forward(inputs)  # returns embeddings
-            prediction = self.network.predict(outputs).cpu().detach().numpy()  # return score classes as logits
+            prediction = self.network.predict(outputs).cpu().detach()  # return score classes as logits
 
             _, predicted = prediction.max(1)
             total += targets.size(0)

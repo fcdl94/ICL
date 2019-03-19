@@ -41,7 +41,7 @@ def print_accuracy(methods, acc_base, acc_new, acc_cum):
 
 class AbstractMethod(ABC):
 
-    def __init__(self, network, n_classes, nb_base, nb_incr, log):
+    def __init__(self, network, n_classes, nb_base, nb_incr, log, name):
         self.network = network
         self.n_classes = n_classes
         self.nb_base = nb_base
@@ -54,6 +54,7 @@ class AbstractMethod(ABC):
         self.log_folder = log
         create_log_folder(log)
 
+        self.name = name
         self.dataset = None
 
     @abstractmethod
