@@ -62,7 +62,7 @@ class AbstractMethod(ABC):
         pass
 
     @abstractmethod
-    def incremental_fit(self, iteration, data_loader):
+    def incremental_fit(self, iteration, train_loader, valid_dataloader):
         pass
 
     @abstractmethod

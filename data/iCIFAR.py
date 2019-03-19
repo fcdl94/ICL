@@ -14,26 +14,46 @@ class ICIFAR(AbstractIncrementalDataloader):
 
     def __init__(self, root, download=True,
                  num_cl_first=10, num_cl_after=10,
-                 augmentation=None, transform=None,
+                 augmentation=None, transform=None, validation_split=.2,
                  order_file=None, batch_size=64, run_number=0, workers=1):
 
         super().__init__()
 
         # Load the dataset
-        self.train_dataset = \
+        train_dataset = \
             torchvision.datasets.CIFAR100(root=root, train=True, download=download, transform=None)
-        self.valid_dataset = \
+        self.test_dataset = \
             torchvision.datasets.CIFAR100(root=root, train=False, download=download, transform=transform)
+
+        shuffle_dataset = True
+        random_seed = 42
+
+        # Creating data indices for training and validation splits:
+        dataset_size = len(train_dataset.targets)
+        indices = list(range(dataset_size))
+        split = int(np.floor(validation_split * dataset_size))
+        if shuffle_dataset:
+            np.random.seed(random_seed)
+            np.random.shuffle(indices)
+        train_indices, val_indices = indices[split:], indices[:split]
+
+        if validation_split == 0:
+            self.val_indices = train_indices[:batch_size]  # just for not being empty and avoid a more complex code
+
+        # make training and validation dataset following the split
+        self.train_dataset = Subset(train_dataset, train_indices, None)
+        self.valid_dataset = Subset(train_dataset, val_indices, transform)
+
+        # get targets to compute indices
+        self.train_target = torch.tensor([train_dataset.targets[i] for i in train_indices])
+        self.valid_target = torch.tensor([train_dataset.targets[i] for i in val_indices])
+        self.test_target = torch.tensor(self.test_dataset.targets)  # this does not work with torchvision < 0.2.2
 
         if augmentation is not None:
             self.augmentation = torchvision.transforms.Compose([augmentation, transform])
         else:
             self.augmentation = transform
         self.transform = transform  # this works as ToTensor, without changing the image content.
-
-        # get targets to compute indices
-        self.train_target = torch.tensor(self.train_dataset.targets)  # this does not work with torchvision < 0.2.2
-        self.valid_target = torch.tensor(self.valid_dataset.targets)  # this does not work with torchvision < 0.2.2
 
         # get the order for incremental cifar
         if order_file is None:
@@ -114,20 +134,27 @@ class ICIFAR(AbstractIncrementalDataloader):
         if iteration > self.num_iteration_max:
             raise Exception("You should stop before, you asked too many iterations")
 
-        dataset_full = self.train_dataset
         classes = self.order[self.offset(iteration-1): self.offset(iteration)]
         indices = get_index_of_classes(self.train_target, classes)
 
-        dataset = Subset(dataset_full, indices, self.augmentation)
+        train_dataset = Subset(self.train_dataset, indices, self.augmentation)
 
         if x_additional is not None and y_additional is not None:
             # use the same transform of the dataset to augment the prototypes
             dataset_prototypes = DatasetPrototypes(x_additional, y_additional, self.augmentation)
-            dataset += dataset_prototypes
+            train_dataset += dataset_prototypes
 
-        data_loader = DataLoader(dataset, batch_size=self.batch_size, shuffle=True, num_workers=self.workers)
+        train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=self.workers)
 
-        return data_loader
+        # Make validation of current class
+        valid_classes = self.order[self.offset(iteration - 1): self.offset(iteration)]
+        valid_indices = get_index_of_classes(self.valid_target, valid_classes)
+
+        valid_dataset = Subset(self.valid_dataset, valid_indices)
+
+        val_loader = DataLoader(valid_dataset, batch_size=self.batch_size, shuffle=False, num_workers=self.workers)
+
+        return train_loader, val_loader
 
     def test_dataloader(self, iteration=None, cumulative=True, batch_size=None):
         if iteration is None:
@@ -145,8 +172,8 @@ class ICIFAR(AbstractIncrementalDataloader):
 
         classes = self.order[start_offset: self.offset(iteration)]
 
-        dataset_full = self.valid_dataset
-        indices = get_index_of_classes(self.valid_target, classes)
+        dataset_full = self.test_dataset
+        indices = get_index_of_classes(self.test_target, classes)
         dataset = Subset(dataset_full, indices)
 
         data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=self.workers)

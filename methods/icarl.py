@@ -3,6 +3,7 @@ import torch
 from torchvision import transforms
 import torch.nn as nn
 import torch.optim as optim
+from torch.optim.lr_scheduler import MultiStepLR
 import numpy as np
 import copy
 from datetime import datetime
@@ -24,8 +25,9 @@ if torch.cuda.is_available():
 class ICarl(AbstractMethod):
 
     def __init__(self, network, n_classes=100, nb_base=10, nb_incr=10,
-                 mem_size=MEM_SIZE, distillation=True,
-                 lr_init=LR, decay=DECAY, epochs=EPOCHS, device=DEVICE, log="ICARL", name="ICARL"):
+                 mem_size=MEM_SIZE, distillation=True, features=64,
+                 lr_init=LR, decay=DECAY, epochs=EPOCHS, device=DEVICE,
+                 log="ICARL", name="ICARL", **trash):
         """
         :param network: the backbone neural network of the model
         :param n_classes: Number of classes of the dataset
@@ -49,14 +51,14 @@ class ICarl(AbstractMethod):
         self.distillation = distillation
         self.prototypes = None
         self.alpha_dr_herding = [np.array([0]) for i in range(n_classes)]
+        self.features = features
 
         # training parameters
         self.device = device
         self.lr_init = lr_init
         self.decay = decay
         self.epochs = epochs
-        self.lr_strat = [round(epochs * 0.7), round(epochs * 0.9)]
-        self.lr_factor = LR_FACTOR
+        self.lr_factor = 1. / LR_FACTOR
 
     def fit(self, dataset, checkpoint=None, epochs=None):
 
@@ -84,12 +86,13 @@ class ICarl(AbstractMethod):
         for iteration in range(start_iter, self.iteration_total):
 
             # Prepare the training data for the current batch of classes
-            data_loader = dataset.next_iteration(x_protoset, y_protoset)
+            train_loader, valid_dataloader = dataset.next_iteration(x_protoset, y_protoset)
 
             # TRAIN THIS ITERATION #
             print('Batch of classes number {0} arrives ...'.format(iteration + 1))
 
-            self.incremental_fit(iteration, data_loader)  # train for N epochs (after each epoch validate)
+            # train for N epochs (after each epoch validate)
+            self.incremental_fit(iteration, train_loader, valid_dataloader)
 
             # END OF TRAINING FOR THIS ITERATION #
 
@@ -150,19 +153,21 @@ class ICarl(AbstractMethod):
             nb_cl = self.nb_base
         return nb_cl
 
-    def incremental_fit(self, iteration, data_loader):
+    def incremental_fit(self, iteration, train_loader, valid_loader):
         new_lr = self.lr_init
         optimizer = optim.SGD(filter(lambda p: p.requires_grad, self.network.parameters()), lr=new_lr, momentum=0.9,
                               weight_decay=self.decay, nesterov=False)
+        scheduler = MultiStepLR(optimizer, [round(self.epochs * 0.7), round(self.epochs * 0.9)], self.lr_factor)
 
         for epoch in range(self.epochs):
             self.network.train()
             train_loss = 0
-            correct = 0
-            total = 0
+            train_correct = 0
+            train_total = 0
+            scheduler.step()
 
             # In each epoch, we do a full pass over the training data:
-            for inputs, targets_prep in data_loader:
+            for inputs, targets_prep in train_loader:
 
                 targets = np.zeros((inputs.shape[0], self.n_classes), np.float32)  # 100 = classes of cifar
                 targets[range(len(targets_prep)), targets_prep.type(torch.int32)] = 1.  # prepare target for CE loss
@@ -188,47 +193,38 @@ class ICarl(AbstractMethod):
 
                 train_loss += loss_bx.item()
                 _, predicted = prediction.max(1)
-                total += targets.size(0)
-                correct += predicted.eq(targets_prep).sum().item()
+                train_total += targets.size(0)
+                train_correct += predicted.eq(targets_prep).sum().item()
 
-            # if VALIDATION:
-            # self.network.eval()
-            # test_loss = 0
-            # correct = 0
-            # total = 0
-            # # count = 0
-            # for inputs, targets_prep in self.dataset.minibatches(train=False):
-            #     # count += 1
-            #
-            #     targets = np.zeros((inputs.shape[0], 100), np.float32)
-            #     targets[range(len(targets_prep)), targets_prep.type(torch.int32)] = 1.
-            #
-            #     inputs = inputs.to(self.device)
-            #
-            #     outputs = self.network.forward(inputs)  # make the embedding
-            #     outputs = self.network.predict(outputs)  # make the prediction with sigmoid, making g_y(xi)
-            #
-            #     targets = torch.tensor(targets).to(outputs.device)
-            #     loss_bx = self.loss(outputs, targets)
-            #     test_loss += loss_bx.item()
-            #
-            #     targets_prep = torch.LongTensor(targets_prep).to(outputs.device)
-            #     _, predicted = outputs.max(1)
-            #     correct += predicted.eq(targets_prep).sum().item()
-            #
-            #     total += targets.size(0)
-            #
+            self.network.eval()
+            test_loss = 0
+            test_correct = 0
+            test_total = 0
+            for inputs, targets_prep in valid_loader:
 
-            acc = 100. * correct / total
+                targets = np.zeros((inputs.shape[0], 100), np.float32)
+                targets[range(len(targets_prep)), targets_prep.type(torch.int32)] = 1.
 
-            print(f"Epoch {epoch + 1:3d} : Train Loss {train_loss / len(data_loader):.6f}, Train Acc {acc:.2f}")
+                inputs = inputs.to(self.device)
 
-            # adjust learning rate
-            if (epoch + 1) in self.lr_strat:
-                new_lr = new_lr / self.lr_factor
-                print("New LR:" + str(new_lr))
-                optimizer = optim.SGD(filter(lambda p: p.requires_grad, self.network.parameters()), lr=new_lr,
-                                      momentum=0.9, weight_decay=self.decay, nesterov=False)
+                outputs = self.network.forward(inputs)  # make the embedding
+                outputs = self.network.predict(outputs)  # make the prediction with sigmoid, making g_y(xi)
+
+                targets = torch.tensor(targets).to(outputs.device)
+                loss_bx = self.loss(outputs, targets)
+                test_loss += loss_bx.item()
+
+                targets_prep = torch.LongTensor(targets_prep).to(outputs.device)
+                _, predicted = outputs.max(1)
+                test_correct += predicted.eq(targets_prep).sum().item()
+
+                test_total += targets.size(0)
+
+            train_acc = 100. * train_correct / train_total
+            test_acc = 100. * test_correct / test_total
+
+            print(f"Epoch {epoch + 1:3d} : Train Loss {train_loss / len(train_loader):.6f}, Train Acc {train_acc:.2f}\n"
+                  f"          : Valid Loss {test_loss / len(valid_loader):.6f}, Valid Acc {test_acc:.2f}")
 
         # Duplicate current network to distillate info
         self.network2 = copy.deepcopy(self.network)
@@ -301,7 +297,7 @@ class ICarl(AbstractMethod):
 
     def compute_means(self, iteration):
 
-        class_means = np.zeros((64, 100, 3))
+        class_means = np.zeros((self.features, 100, 3))
         nb_protos_cl = self.mem_size // self.compute_num_classes(iteration)  # num of exemplars per class
 
         if nb_protos_cl > 0:

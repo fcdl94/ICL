@@ -31,7 +31,7 @@ class AbstractIncrementalDataloader(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def next_iteration(self, x_additional=None, y_additional=None, iteration=None) -> DataLoader:
+    def next_iteration(self, x_additional=None, y_additional=None, iteration=None) -> (DataLoader, DataLoader):
         """
         This function returns the data on which perform the epochs for the selected iteration.
         Training data are shuffled.
@@ -39,11 +39,11 @@ class AbstractIncrementalDataloader(ABC):
         :param x_additional: Data to add at the dataset
         :param y_additional: Data to add at the dataset
         :param iteration:  Selection for the iteration (0 for the base batch)
-        :return: DataLoader to iterate across data
+        :return: train_dataloader, valid_dataloader to iterate across data
         """
         raise NotImplementedError
 
     @abstractmethod
-    def test_dataloader(self, iteration=None, cumulative=True, batch_size=None)  -> DataLoader:
+    def test_dataloader(self, iteration=None, cumulative=True, batch_size=None) -> DataLoader:
         # it must return a DataLoader for cumulative
         raise NotImplementedError
