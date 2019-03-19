@@ -44,8 +44,8 @@ class IncrementalDataloader(AbstractIncrementalDataloader):
         self.classes = target.classes
         self.num_classes = len(target.classes)
 
-        self.y_train = torch.tensor(target.targets[train_indices])
-        self.y_valid = torch.tensor(target.targets[val_indices])
+        self.y_train = torch.tensor([target.targets[i] for i in train_indices])
+        self.y_valid = torch.tensor([target.targets[i] for i in val_indices])
 
         # get variable for this loader
         self.num_cl_first = num_cl_first  # N
