@@ -6,6 +6,7 @@ import os
 from torchvision import transforms
 from torchvision.datasets import ImageFolder
 import torch
+import numpy as np
 
 if not os.path.exists("checkpoint"):
     os.mkdir("checkpoint")
@@ -56,7 +57,8 @@ else:
 # now start with the main
 
 # fix for reproducibility
-torch.manual_seed(42)
+torch.manual_seed(args.seed)
+np.random.seed(seed=args.seed)
 
 # create the transforms
 # normalization of ImageNet
@@ -84,7 +86,7 @@ for run in range(int(args.from_run), nb_runs):
     network = networks.resnet18(pretrained=args.pretrained, num_classes=65)
     # define the method
     method = methods.get_method(method_name, config=args.config_file, network=network, n_classes=65,
-                                nb_base=nb_base, nb_incr=nb_incr,
+                                nb_base=nb_base, nb_incr=nb_incr, features=512,
                                 log=f"logs/reals/{log}/run{run}")
     # run fit!
     acc = method.fit(data, epochs=args.epochs)

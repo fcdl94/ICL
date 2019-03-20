@@ -3,7 +3,7 @@ import numpy as np
 import torch
 from .abstract import AbstractIncrementalDataloader
 import os
-from .common import DatasetPrototypes, Subset, get_index_of_classes
+from .common import DatasetPrototypes, Subset, get_index_of_classes, split_dataset
 from torch.utils.data import DataLoader
 
 
@@ -14,8 +14,8 @@ class ICIFAR(AbstractIncrementalDataloader):
 
     def __init__(self, root, download=True,
                  num_cl_first=10, num_cl_after=10,
-                 augmentation=None, transform=None, validation_split=.2,
-                 order_file=None, batch_size=64, run_number=0, workers=1):
+                 augmentation=None, transform=None, validation_size=.2,
+                 order_file=None, batch_size=128, run_number=0, workers=1):
 
         super().__init__()
 
@@ -25,20 +25,9 @@ class ICIFAR(AbstractIncrementalDataloader):
         self.test_dataset = \
             torchvision.datasets.CIFAR100(root=root, train=False, download=download, transform=transform)
 
-        shuffle_dataset = True
-        random_seed = 42
-
         # Creating data indices for training and validation splits:
-        dataset_size = len(train_dataset.targets)
-        indices = list(range(dataset_size))
-        split = int(np.floor(validation_split * dataset_size))
-        if shuffle_dataset:
-            np.random.seed(random_seed)
-            np.random.shuffle(indices)
-        train_indices, val_indices = indices[split:], indices[:split]
-
-        if validation_split == 0:
-            self.val_indices = train_indices[:batch_size]  # just for not being empty and avoid a more complex code
+        train_indices, val_indices = split_dataset(len(train_dataset.targets), True,
+                                                   validation_split=validation_size, batch_size=batch_size)
 
         # make training and validation dataset following the split
         self.train_dataset = Subset(train_dataset, train_indices, None)
@@ -147,8 +136,7 @@ class ICIFAR(AbstractIncrementalDataloader):
         train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=self.workers)
 
         # Make validation of current class
-        valid_classes = self.order[self.offset(iteration - 1): self.offset(iteration)]
-        valid_indices = get_index_of_classes(self.valid_target, valid_classes)
+        valid_indices = get_index_of_classes(self.valid_target, classes)
 
         valid_dataset = Subset(self.valid_dataset, valid_indices)
 

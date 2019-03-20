@@ -5,6 +5,7 @@ import argparse
 import os
 from torchvision import transforms
 import torch
+import numpy as np
 
 if not os.path.exists("checkpoint"):
     os.mkdir("checkpoint")
@@ -54,10 +55,11 @@ if args.log is None:
 else:
     log = args.log
 
-# now start with the main
-
 # fix for reproducibility
 torch.manual_seed(args.seed)
+np.random.seed(seed=args.seed)
+
+# now start with the main
 
 # create the transforms
 # Normalize to have range between -1,1 : (x - 0.5) * 2

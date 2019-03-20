@@ -2,6 +2,11 @@ import os
 from abc import ABC, abstractmethod
 
 
+def print_training(epoch, train_loss, train_loader_len, train_acc, valid_loss, valid_loader_len, valid_acc):
+    print(f"Epoch {epoch + 1:3d} : Train Loss {train_loss /train_loader_len:.6f}, Train Acc {train_acc:.2f}\n"
+          f"          : Valid Loss {valid_loss / valid_loader_len:.6f}, Valid Acc {valid_acc:.2f}")
+
+
 def save_results(file, acc_base, acc_new, acc_cum):
     print_header = False
     if not os.path.isfile(file):

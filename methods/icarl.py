@@ -157,7 +157,8 @@ class ICarl(AbstractMethod):
         new_lr = self.lr_init
         optimizer = optim.SGD(filter(lambda p: p.requires_grad, self.network.parameters()), lr=new_lr, momentum=0.9,
                               weight_decay=self.decay, nesterov=False)
-        scheduler = MultiStepLR(optimizer, [round(self.epochs * 0.7), round(self.epochs * 0.9)], self.lr_factor)
+        steps = [round(int(self.epochs * 0.7)), round(int(self.epochs * 0.9))]
+        scheduler = MultiStepLR(optimizer, steps, self.lr_factor)
 
         for epoch in range(self.epochs):
             self.network.train()
@@ -169,8 +170,8 @@ class ICarl(AbstractMethod):
             # In each epoch, we do a full pass over the training data:
             for inputs, targets_prep in train_loader:
 
-                targets = np.zeros((inputs.shape[0], self.n_classes), np.float32)  # 100 = classes of cifar
-                targets[range(len(targets_prep)), targets_prep.type(torch.int32)] = 1.  # prepare target for CE loss
+                targets = np.zeros((inputs.shape[0], self.n_classes), np.float32)
+                targets[range(len(targets_prep)), targets_prep.type(torch.int32)] = 1.
 
                 inputs = inputs.to(self.device)
 
@@ -202,29 +203,27 @@ class ICarl(AbstractMethod):
             test_total = 0
             for inputs, targets_prep in valid_loader:
 
-                targets = np.zeros((inputs.shape[0], 100), np.float32)
+                targets = np.zeros((inputs.shape[0], self.n_classes), np.float32)
                 targets[range(len(targets_prep)), targets_prep.type(torch.int32)] = 1.
 
                 inputs = inputs.to(self.device)
 
                 outputs = self.network.forward(inputs)  # make the embedding
                 outputs = self.network.predict(outputs)  # make the prediction with sigmoid, making g_y(xi)
-
                 targets = torch.tensor(targets).to(outputs.device)
-                loss_bx = self.loss(outputs, targets)
-                test_loss += loss_bx.item()
-
                 targets_prep = torch.LongTensor(targets_prep).to(outputs.device)
-                _, predicted = outputs.max(1)
-                test_correct += predicted.eq(targets_prep).sum().item()
 
+                loss_bx = self.loss(outputs, targets)  # without distillation? -> YES, validation only on new classes
+
+                test_loss += loss_bx.item()
+                _, predicted = outputs.max(1)
                 test_total += targets.size(0)
+                test_correct += predicted.eq(targets_prep).sum().item()
 
             train_acc = 100. * train_correct / train_total
             test_acc = 100. * test_correct / test_total
 
-            print(f"Epoch {epoch + 1:3d} : Train Loss {train_loss / len(train_loader):.6f}, Train Acc {train_acc:.2f}\n"
-                  f"          : Valid Loss {test_loss / len(valid_loader):.6f}, Valid Acc {test_acc:.2f}")
+            print_training(epoch, train_loss, len(train_loader), train_acc, test_loss, len(valid_loader), test_acc)
 
         # Duplicate current network to distillate info
         self.network2 = copy.deepcopy(self.network)
@@ -297,7 +296,7 @@ class ICarl(AbstractMethod):
 
     def compute_means(self, iteration):
 
-        class_means = np.zeros((self.features, 100, 3))
+        class_means = np.zeros((self.features, self.n_classes, 3))
         nb_protos_cl = self.mem_size // self.compute_num_classes(iteration)  # num of exemplars per class
 
         if nb_protos_cl > 0:

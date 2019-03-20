@@ -3,7 +3,7 @@ import torch
 from .abstract import AbstractIncrementalDataloader
 from torch.utils.data import DataLoader
 from torchvision.datasets.folder import DatasetFolder
-from .common import DatasetPrototypes, Subset, get_index_of_classes
+from .common import DatasetPrototypes, Subset, get_index_of_classes, split_dataset
 import torchvision.transforms
 
 
@@ -11,7 +11,7 @@ class IDADataloader(AbstractIncrementalDataloader):
 
     def __init__(self, target, source,
                  num_cl_first=10, num_cl_after=10,
-                 augmentation=None, transform=None,
+                 augmentation=None, transform=None, validation_size=0.2,
                  order_file=None, batch_size=64, run_number=0, workers=1):
         super().__init__()
         # Incremental domain adaptation: N classes + M classes + M + M etc.
@@ -22,19 +22,28 @@ class IDADataloader(AbstractIncrementalDataloader):
 
         assert target.transform is None, "You should not specify any transform to the Datasets"
         assert source.transform is None, "You should not specify any transform to the Datasets"
+        assert transform is not None, "You should pass a transform to transform Image into Tensor"
 
-        # get important variables from dataset
-        self.source = source  # returns images as PIL Image
-        self.target = target  # returns images as PIL Image
+        # Creating data indices for training and validation splits:
+        train_indices, val_indices = \
+            split_dataset(len(target.targets), True, validation_split=validation_size,
+                          batch_size=batch_size)
+
+        # make training and validation dataset following the split
+        self.train = Subset(target, train_indices, None)     # returns images as PIL Image
+        self.valid = Subset(target, val_indices, transform)  # return tensors
+        self.test = self.valid                               # return tensors
+        self.source = source                                 # returns images as PIL Image
+
+        self.train_target = torch.tensor([target.targets[i] for i in train_indices])
+        self.valid_target = torch.tensor([target.targets[i] for i in val_indices])
+        self.test_target = self.valid_target
+        self.source_target = torch.tensor(source.targets)
 
         self.augmentation = augmentation  # this works as data augmentation
         self.transform = transform  # this works as ToTensor, without changing the images.
 
-        self.classes = target.classes
         self.num_classes = len(target.classes)
-
-        self.y_target = torch.tensor(target.targets)
-        self.y_source = torch.tensor(source.targets)
 
         # get variable for this loader
         self.num_cl_first = num_cl_first  # N
@@ -75,10 +84,10 @@ class IDADataloader(AbstractIncrementalDataloader):
 
         if idx_in_order >= self.num_cl_first:
             dataset = self.source
-            target = self.y_source
+            target = self.source_target
         else:
-            dataset = self.target
-            target = self.y_target
+            dataset = self.train
+            target = self.train_target
 
         # dataset[x.item()][0] is PIL Image (I'm not using any transform)
         images = [dataset[x.item()][0] for x in get_index_of_classes(target, [idx])]
@@ -91,10 +100,10 @@ class IDADataloader(AbstractIncrementalDataloader):
 
         if idx_in_order >= self.num_cl_first:
             dataset = self.source
-            target = self.y_source
+            target = self.source_target
         else:
-            dataset = self.target
-            target = self.y_target
+            dataset = self.train
+            target = self.train_target
 
         indices = get_index_of_classes(target, [idx])
 
@@ -130,14 +139,14 @@ class IDADataloader(AbstractIncrementalDataloader):
 
         # chose the dataset
         if iteration == 0:
-            dataset_full = self.target
+            dataset_full = self.train
             classes = self.order[0: self.num_cl_first]
-            indices = get_index_of_classes(self.y_target, classes)
+            indices = get_index_of_classes(self.train_target, classes)
 
         elif 0 < iteration < self.num_iteration_max:
             dataset_full = self.source
             classes = self.order[self.offset(iteration-1): self.offset(iteration)]
-            indices = get_index_of_classes(self.y_source, classes)
+            indices = get_index_of_classes(self.source_target, classes)
 
         else:
             raise Exception("You should stop before, you asked too many iterations")
@@ -147,16 +156,20 @@ class IDADataloader(AbstractIncrementalDataloader):
         else:
             transform = self.transform
 
-        dataset = Subset(dataset_full, indices, transform)
+        train_dataset = Subset(dataset_full, indices, transform)
+
+        valid_indices = get_index_of_classes(self.valid_target, classes)
+        valid_dataset = Subset(self.valid, valid_indices)
 
         if x_additional is not None and y_additional is not None:
             # use the same transform of the dataset to augment the prototypes
             dataset_prototypes = DatasetPrototypes(x_additional, y_additional, transform)
-            dataset += dataset_prototypes
+            train_dataset += dataset_prototypes
 
-        data_loader = DataLoader(dataset, batch_size=self.batch_size, shuffle=True, num_workers=self.workers)
+        train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=self.workers)
+        valid_loader = DataLoader(valid_dataset, batch_size=self.batch_size, shuffle=False, num_workers=self.workers)
 
-        return data_loader
+        return train_loader, valid_loader
 
     def test_dataloader(self, iteration=None, cumulative=True, batch_size=None):
         if iteration is None:
@@ -174,9 +187,9 @@ class IDADataloader(AbstractIncrementalDataloader):
 
         classes = self.order[start_offset: self.offset(iteration)]
 
-        dataset_full = self.target
-        indices = get_index_of_classes(self.y_target, classes)
-        dataset = Subset(dataset_full, indices, self.transform)
+        dataset_full = self.test
+        indices = get_index_of_classes(self.test_target, classes)
+        dataset = Subset(dataset_full, indices)
 
         data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=self.workers)
         return data_loader

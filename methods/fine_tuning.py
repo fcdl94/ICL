@@ -49,20 +49,21 @@ class FineTuning(AbstractMethod):
         for iteration in range(start_iter, self.iteration_total):
 
             # Prepare the training data for the current batch of classes
-            data_loader = dataset.next_iteration()
+            train_loader, valid_loader = dataset.next_iteration()
 
             # TRAIN THIS ITERATION #
             print('Batch of classes number {0} arrives ...'.format(iteration + 1))
 
-            self.incremental_fit(iteration, data_loader)  # train for N epochs (after each epoch validate)
+            # train for N epochs (after each epoch validate)
+            self.incremental_fit(iteration, train_loader, valid_loader)
 
             # END OF TRAINING FOR THIS ITERATION #
 
             # Save training checkpoint
-            torch.save({
-                'iteration': iteration,
-                'network': self.network.state_dict(),
-            }, "checkpoint/iter_" + str(iteration) + "_checkpoint.pth.tar")
+            # torch.save({
+            #    'iteration': iteration,
+            #    'network': self.network.state_dict(),
+            # }, "checkpoint/iter_" + str(iteration) + "_checkpoint.pth.tar")
 
             # COMPUTE ACCURACY ##
             acc_cum = self.test(iteration)
@@ -96,7 +97,7 @@ class FineTuning(AbstractMethod):
 
         return cumulative_accuracies
 
-    def incremental_fit(self, iteration, data_loader):
+    def incremental_fit(self, iteration, train_loader, valid_loader):
         optimizer = optim.SGD(filter(lambda p: p.requires_grad, self.network.parameters()),
                               lr=self.lr, momentum=self.momentum, weight_decay=self.decay)
         scheduler = MultiStepLR(optimizer, [int(0.7*self.epochs), int(0.9*self.epochs)], self.factor)
@@ -105,11 +106,14 @@ class FineTuning(AbstractMethod):
             self.network.train()
             scheduler.step()
             train_loss = 0
-            correct = 0
-            total = 0
+            train_correct = 0
+            train_total = 0
+            valid_loss = 0
+            valid_correct = 0
+            valid_total = 0
 
             # In each epoch, we do a full pass over the training data:
-            for inputs, targets in data_loader:
+            for inputs, targets in train_loader:
 
                 optimizer.zero_grad()
                 inputs = inputs.to(self.device)
@@ -124,12 +128,31 @@ class FineTuning(AbstractMethod):
 
                 train_loss += loss_bx.item()
                 _, predicted = prediction.max(1)
-                total += targets.size(0)
-                correct += predicted.eq(targets).sum().item()
+                train_total += targets.size(0)
+                train_correct += predicted.eq(targets).sum().item()
 
-            acc = 100. * correct / total
+            train_acc = 100. * train_correct / train_total
 
-            print(f"Epoch {epoch + 1:3d} : Train Loss {train_loss / len(data_loader):.6f}, Train Acc {acc:.2f}")
+            self.network.eval()
+            # In each epoch, we do a full pass over the training data:
+            for inputs, targets in valid_loader:
+
+                inputs = inputs.to(self.device)
+                targets = targets.to(self.device)
+
+                outputs = self.network.forward(inputs)  # feature vector only
+                prediction = self.network.predict(outputs)  # make the prediction
+
+                loss_bx = self.loss(prediction, targets)  # CE loss
+
+                valid_loss += loss_bx.item()
+                _, predicted = prediction.max(1)
+                valid_total += targets.size(0)
+                valid_correct += predicted.eq(targets).sum().item()
+
+            valid_acc = 100. * valid_correct / valid_total
+
+            print_training(epoch, train_loss, len(train_loader), train_acc, valid_loss, len(valid_loader), valid_acc)
 
     def predict(self, inputs):
         inputs = inputs.to(self.device)

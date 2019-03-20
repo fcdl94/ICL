@@ -260,6 +260,7 @@ def resnet18(pretrained=False, num_classes=1000):
     """Constructs a ResNet-18 model.
     Args:
         pretrained (bool): If True, returns a model pre-trained on ImageNet
+        num_classes (int): Number of classes of the system
     """
     model = ResNet(BasicBlock, [2, 2, 2, 2])
     if pretrained:
@@ -275,6 +276,7 @@ def resnet34(pretrained=False, num_classes=1000):
     """Constructs a ResNet-34 model.
     Args:
         pretrained (bool): If True, returns a model pre-trained on ImageNet
+        num_classes (int): Number of classes of the system
     """
     model = ResNet(BasicBlock, [3, 4, 6, 3])
     if pretrained:
@@ -290,6 +292,7 @@ def resnet50(pretrained=False, num_classes=1000):
     """Constructs a ResNet-50 model.
     Args:
         pretrained (bool): If True, returns a model pre-trained on ImageNet
+        num_classes (int): Number of classes of the system
     """
     model = ResNet(Bottleneck, [3, 4, 6, 3])
     if pretrained:
@@ -305,6 +308,7 @@ def resnet101(pretrained=False, num_classes=1000):
     """Constructs a ResNet-101 model.
     Args:
         pretrained (bool): If True, returns a model pre-trained on ImageNet
+        num_classes (int): Number of classes of the system
     """
     model = ResNet(Bottleneck, [3, 4, 23, 3])
     if pretrained:
@@ -320,6 +324,7 @@ def resnet152(pretrained=False, num_classes=1000):
     """Constructs a ResNet-152 model.
     Args:
         pretrained (bool): If True, returns a model pre-trained on ImageNet
+        num_classes (int): Number of classes of the system
     """
     model = ResNet(Bottleneck, [3, 8, 36, 3])
     if pretrained:

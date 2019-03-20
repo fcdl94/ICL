@@ -1,5 +1,5 @@
 {
-  "mem_size":2000,
+  "mem_size":1300,
   "distillation":true,
   "lr_init": 2.0,
   "decay": 0.00001,
