@@ -21,8 +21,8 @@ parser = argparse.ArgumentParser(description='Incremental class learning with Do
 # dataset variables
 parser.add_argument('--root', default='/home/fcdl/dataset/office', help='Base directory where are stored the data')
 parser.add_argument('-t', '--target', default='Real World', help='Dataset Folder')
-parser.add_argument('-b', '--num_base_classes', default=10, type=int, help='Number of classes each increment')
-parser.add_argument('-i', '--num_incremental_classes', default=5, type=int, help='Number of classes each increment')
+parser.add_argument('-b', '--num_base_classes', default=15, type=int, help='Number of classes each increment')
+parser.add_argument('-i', '--num_incremental_classes', default=10, type=int, help='Number of classes each increment')
 parser.add_argument('--num_runs', default=1, type=int, help='Number of runs to test (each run has different order')
 parser.add_argument('--from_run', default=0, help='The first run (order of classes) to be evaluated')
 parser.add_argument('--order', default=None, help='Order file path')
@@ -37,7 +37,7 @@ parser.add_argument('-m', '--method', default='icarl', help='Method to be tested
 parser.add_argument('-l', '--log', default=None, help='Method name where are saved logs and results')
 parser.add_argument('-c', '--config_file', default=None, help='Config file where to get parameters for training')
 parser.add_argument('--seed', default=42, help='The random seed to use')
-parser.add_argument('--epochs', default=None, help='The number of epochs to use')
+parser.add_argument('--epochs', default=None, type=int, help='The number of epochs to use')
 
 args = parser.parse_args()
 
@@ -78,7 +78,7 @@ for run in range(int(args.from_run), nb_runs):
     # get the data
     target = ImageFolder(args.root + "/" + args.target, None, None)
 
-    data = IDataloader(target,
+    data = IDataloader(target, order_file=args.root+"/office_order.npy",
                        num_cl_first=nb_base, num_cl_after=nb_incr,
                        augmentation=augmentation, transform=transform,
                        batch_size=batch_size, run_number=run, workers=8)
@@ -87,6 +87,6 @@ for run in range(int(args.from_run), nb_runs):
     # define the method
     method = methods.get_method(method_name, config=args.config_file, network=network, n_classes=65,
                                 nb_base=nb_base, nb_incr=nb_incr, features=512,
-                                log=f"logs/reals/{log}/run{run}")
+                                log=f"logs/office/run{run}/{log}", name=f"office-{run}-{log}")
     # run fit!
     acc = method.fit(data, epochs=args.epochs)

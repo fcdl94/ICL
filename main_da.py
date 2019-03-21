@@ -80,7 +80,7 @@ for run in range(int(args.from_run), nb_runs):
     source = ImageFolder(args.root + "/" + args.source, None, None)
     target = ImageFolder(args.root + "/" + args.target, None, None)
 
-    data = IDADataloader(target, source,
+    data = IDADataloader(target, source, order_file=args.root+"/office_order.npy",
                          num_cl_first=nb_base, num_cl_after=nb_incr,
                          augmentation=augmentation, transform=transform,
                          batch_size=batch_size, run_number=run, workers=8)
@@ -89,6 +89,6 @@ for run in range(int(args.from_run), nb_runs):
     # define the method
     method = methods.get_method(method_name, config=args.config_file, network=network, n_classes=65,
                                 nb_base=nb_base, nb_incr=nb_incr, features=512,
-                                log=f"logs/office/{log}/run{run}")
+                                log=f"logs/office/run{run}/{log}", name=f"office-{run}-{log}")
     # run fit!
     acc = method.fit(data, epochs=args.epochs)

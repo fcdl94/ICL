@@ -14,14 +14,13 @@ def get_index_of_classes(target, classes):
     return torch.cat(l)
 
 
-def split_dataset(dataset_size, shuffle, random_seed=42, validation_split=0.2, test_split=None, batch_size=128):
+def split_dataset(dataset_size, shuffle, validation_split=0.2, test_split=None, batch_size=128):
 
     # Creating data indices for training and validation splits:
     indices = list(range(dataset_size))
     split1 = int(np.floor(validation_split * dataset_size))
 
     if shuffle:
-        np.random.seed(random_seed)
         np.random.shuffle(indices)
 
     if test_split is not None:

@@ -152,7 +152,8 @@ class FineTuning(AbstractMethod):
 
             valid_acc = 100. * valid_correct / valid_total
 
-            print_training(epoch, train_loss, len(train_loader), train_acc, valid_loss, len(valid_loader), valid_acc)
+            self.logger.log_training(epoch, train_loss/len(train_loader), train_acc,
+                                     valid_loss/len(valid_loader), valid_acc, iteration)
 
     def predict(self, inputs):
         inputs = inputs.to(self.device)
@@ -162,10 +163,13 @@ class FineTuning(AbstractMethod):
 
         return prediction.cpu().detach()
 
-    def test(self, iteration, cumulative=True):
+    def test(self, iteration, cumulative=True, conf_matrix=False):
         data_loader = self.dataset.test_dataloader(iteration, cumulative=cumulative)
         correct = 0
         total = 0
+
+        tot_target = []
+        tot_pred = []
 
         for inputs, targets in data_loader:
             inputs = inputs.to(self.device)
@@ -178,4 +182,12 @@ class FineTuning(AbstractMethod):
             total += targets.size(0)
             correct += predicted.eq(targets).sum().item()
 
+            if conf_matrix:
+                tot_target += [i.item() for i in prediction]
+                tot_pred += [i.item() for i in targets]
+
+        if conf_matrix:
+            self.logger.confusion_matrix(self.reorder_target(tot_target),
+                                         self.reorder_target(tot_pred),
+                                         self.n_classes)
         return [100. * correct / total]

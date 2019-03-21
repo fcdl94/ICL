@@ -59,7 +59,7 @@ class IncrementalDataloader(AbstractIncrementalDataloader):
             self.full_order = [np.arange(self.num_classes)]  # if not specified go from zero to num_classes in order
             run_number = 0
         else:
-            self.full_order = np.load(order_file)
+            self.full_order = np.load(order_file).astype(int)
 
         # init parameters
         self.iteration = 0
@@ -131,7 +131,7 @@ class IncrementalDataloader(AbstractIncrementalDataloader):
         else:
             transform = self.transform
 
-        classes = self.order[0: self.offset(iteration)]
+        classes = self.order[self.offset(iteration-1): self.offset(iteration)]
         train_indices = get_index_of_classes(self.train_labels, classes)
 
         valid_indices = get_index_of_classes(self.valid_labels, classes)

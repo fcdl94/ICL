@@ -6,27 +6,27 @@ methods = ["icarl", "lwf", "finetuning"]
 
 
 def __parse_config__(config):
-
-    return {"file": config}
-
-
-def get_method(name, config=None, **kwargs):
-
     pars = {}
 
     if config is not None:
         print("Using config file: " + config)
         with open(config, "r") as read_file:
             pars = json.load(read_file)
+    return pars
+
+
+def get_method(m_name, config=None, **kwargs):
+
+    pars = __parse_config__(config)
 
     for i in kwargs:
         pars[i] = kwargs[i]
 
-    if name.lower() == 'icarl':
+    if m_name.lower() == 'icarl':
         return ICarl(**pars)
-    if name.lower() == 'lwf':
+    if m_name.lower() == 'lwf':
         return ICarl(**pars, mem_size=0)
-    if name.lower() == 'finetuning':
+    if m_name.lower() == 'finetuning':
         return FineTuning(**pars)
 
-    assert True, f"There is no methods called {name}."
+    assert True, f"There is no methods called {m_name}."

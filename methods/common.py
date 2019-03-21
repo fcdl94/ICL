@@ -1,10 +1,11 @@
 import os
 from abc import ABC, abstractmethod
+from .logger import VisdomLogger
 
 
-def print_training(epoch, train_loss, train_loader_len, train_acc, valid_loss, valid_loader_len, valid_acc):
-    print(f"Epoch {epoch + 1:3d} : Train Loss {train_loss /train_loader_len:.6f}, Train Acc {train_acc:.2f}\n"
-          f"          : Valid Loss {valid_loss / valid_loader_len:.6f}, Valid Acc {valid_acc:.2f}")
+def log_training(epoch, train_loss, train_acc, valid_loss, valid_acc):
+    print(f"Epoch {epoch + 1:3d} : Train Loss {train_loss:.6f}, Train Acc {train_acc:.2f}\n"
+          f"          : Valid Loss {valid_loss:.6f}, Valid Acc {valid_acc:.2f}")
 
 
 def save_results(file, acc_base, acc_new, acc_cum):
@@ -58,6 +59,7 @@ class AbstractMethod(ABC):
 
         self.log_folder = log
         create_log_folder(log)
+        self.logger = VisdomLogger(self.log_folder, name)
 
         self.name = name
         self.dataset = None
@@ -77,3 +79,9 @@ class AbstractMethod(ABC):
     @abstractmethod
     def test(self, iteration, cumulative=True,):
         pass
+
+    def reorder_target(self, target):
+        assert self.dataset is not None, "self.dataset is None! Please, set it up before call this method"
+        m = {val: idx for idx, val in enumerate(self.dataset.order)}
+        order_target = [m[v] for v in target]
+        return order_target

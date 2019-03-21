@@ -111,7 +111,7 @@ class ICarl(AbstractMethod):
 
             # COMPUTE ACCURACY ##
             means = self.compute_means(iteration)
-            acc_cum = self.test(iteration, class_means=means)
+            acc_cum = self.test(iteration, class_means=means, conf_matrix=True)
             acc_new = self.test(iteration, class_means=means, cumulative=False)
             acc_base = self.test(0, class_means=means)
 
@@ -223,7 +223,8 @@ class ICarl(AbstractMethod):
             train_acc = 100. * train_correct / train_total
             test_acc = 100. * test_correct / test_total
 
-            print_training(epoch, train_loss, len(train_loader), train_acc, test_loss, len(valid_loader), test_acc)
+            self.logger.log_training(epoch, train_loss/len(train_loader), train_acc,
+                                     test_loss/len(valid_loader), test_acc, iteration)
 
         # Duplicate current network to distillate info
         self.network2 = copy.deepcopy(self.network)
@@ -358,7 +359,7 @@ class ICarl(AbstractMethod):
 
         return class_means
 
-    def test(self, iteration, cumulative=True, class_means=None):
+    def test(self, iteration, cumulative=True, class_means=None, conf_matrix=False):
 
         if class_means is None and self.mem_size > 0:
             class_means = self.compute_means(iteration)
@@ -371,6 +372,9 @@ class ICarl(AbstractMethod):
         stat_icarl_i = []
 
         data_loader = self.dataset.test_dataloader(iteration, cumulative=cumulative)
+
+        target_total = []
+        target_icarl = []
 
         for inputs, targets_prep in data_loader:
             inputs = inputs.to(self.device)
@@ -401,6 +405,9 @@ class ICarl(AbstractMethod):
                 [ll in best for ll, best in zip(targets_prep, np.argsort(score_icarl_inv, axis=1)[:, -1:])])
                 stat_ncm += ([ll in best for ll, best in zip(targets_prep, np.argsort(score_ncm, axis=1)[:, -1:])])
 
+                target_icarl += [i.item() for i in np.argsort(score_icarl, axis=1)[:, -1:]]
+                target_total += [i.item() for i in targets_prep]
+
             stat_hb1 += ([ll in best for ll, best in zip(targets_prep, np.argsort(pred, axis=1)[:, -1:])])
             # use the logits
 
@@ -408,6 +415,11 @@ class ICarl(AbstractMethod):
             top1_acc_list[0] = np.average(stat_icarl) * 100.  # ICarl
             top1_acc_list[2] = np.average(stat_ncm) * 100.  # NCM
             top1_acc_list[3] = np.average(stat_icarl_i) * 100.  # ICaRL inv
+            # print confusion matrix
+            if conf_matrix:
+                self.logger.confusion_matrix(self.reorder_target(target_total),
+                                             self.reorder_target(target_icarl),
+                                             self.n_classes)
 
         top1_acc_list[1] = np.average(stat_hb1) * 100.  # Hybrid 1
 

@@ -61,7 +61,7 @@ class IDADataloader(AbstractIncrementalDataloader):
         if order_file is None:
             self.full_order = [np.arange(self.num_classes)]  # if not specified go from zero to num_classes in order
         else:
-            self.full_order = np.load(order_file)
+            self.full_order = np.load(order_file).astype(int)
 
         # init parameters
         self.iteration = 0
