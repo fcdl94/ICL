@@ -81,7 +81,7 @@ for run in range(int(args.from_run), nb_runs):
     target = ImageFolder(args.root + "/" + args.target, None, None)
 
     data = IDADataloader(target, source, order_file=args.root+"/office_order.npy",
-                         num_cl_first=nb_base, num_cl_after=nb_incr,
+                         n_base=nb_base, n_incr=nb_incr,
                          augmentation=augmentation, transform=transform,
                          batch_size=batch_size, run_number=run, workers=8)
     # define network

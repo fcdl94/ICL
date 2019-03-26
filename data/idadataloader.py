@@ -2,27 +2,26 @@ import numpy as np
 import torch
 from .abstract import AbstractIncrementalDataloader
 from torch.utils.data import DataLoader
-from torchvision.datasets.folder import DatasetFolder
+from torchvision.datasets.folder import ImageFolder
 from .common import DatasetPrototypes, Subset, get_index_of_classes, split_dataset
 import torchvision.transforms
+import os
 
 
 class IDADataloader(AbstractIncrementalDataloader):
 
-    def __init__(self, target, source,
-                 num_cl_first=10, num_cl_after=10,
+    def __init__(self, root, target, source,
+                 n_base=10, n_incr=10,
                  augmentation=None, transform=None, validation_size=0.2,
                  order_file=None, batch_size=64, run_number=0, workers=1):
         super().__init__()
         # Incremental domain adaptation: N classes + M classes + M + M etc.
         # where Domain(N) != Domain(M)
 
-        assert isinstance(target, DatasetFolder), "target must be torchvision.DataFolder"
-        assert isinstance(source, DatasetFolder), "source must be torchvision.DataFolder"
-
-        assert target.transform is None, "You should not specify any transform to the Datasets"
-        assert source.transform is None, "You should not specify any transform to the Datasets"
         assert transform is not None, "You should pass a transform to transform Image into Tensor"
+
+        target = ImageFolder(os.path.join(root, target), None, None)
+        source = ImageFolder(os.path.join(root, source), None, None)
 
         # Creating data indices for training and validation splits:
         train_indices, val_indices = \
@@ -46,12 +45,14 @@ class IDADataloader(AbstractIncrementalDataloader):
         self.num_classes = len(target.classes)
 
         # get variable for this loader
-        self.num_cl_first = num_cl_first  # N
-        self.num_cl_after = num_cl_after  # M
+        self.num_cl_first = n_base  # N
+        self.num_cl_after = n_incr  # M
 
-        assert (self.num_classes - self.num_cl_first) % num_cl_after == 0, \
+        if n_incr == 0:
+            n_incr = 1
+        assert (self.num_classes - self.num_cl_first) % n_incr == 0, \
             "num_cl_after + N*num_cl_after must match the number of classes"
-        self.num_iteration_max = 1 + (self.num_classes - num_cl_first) // num_cl_after
+        self.num_iteration_max = 1 + (self.num_classes - n_base) // n_incr
 
         # get parameters for the loader
         self.batch_size = batch_size
@@ -61,11 +62,11 @@ class IDADataloader(AbstractIncrementalDataloader):
         if order_file is None:
             self.full_order = [np.arange(self.num_classes)]  # if not specified go from zero to num_classes in order
         else:
-            self.full_order = np.load(order_file).astype(int)
+            self.full_order = np.load(os.path.join(root, order_file)).astype(int)
 
         # init parameters
         self.iteration = 0
-        self.order = torch.tensor(self.full_order[run_number])
+        self.order = self.full_order[run_number]
         self.data_loader = None
 
     @property

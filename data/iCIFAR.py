@@ -13,8 +13,8 @@ class ICIFAR(AbstractIncrementalDataloader):
     STD = [0.2675, 0.2565, 0.2761]
 
     def __init__(self, root, download=True,
-                 num_cl_first=10, num_cl_after=10,
-                 augmentation=None, transform=None, validation_size=.2,
+                 n_base=10, n_incr=10,
+                 augmentation=None, transform=None, validation_size=0.,
                  order_file=None, batch_size=128, run_number=0, workers=1):
 
         super().__init__()
@@ -25,18 +25,25 @@ class ICIFAR(AbstractIncrementalDataloader):
         self.test_dataset = \
             torchvision.datasets.CIFAR100(root=root, train=False, download=download, transform=transform)
 
-        # Creating data indices for training and validation splits:
-        train_indices, val_indices = split_dataset(len(train_dataset.targets), True,
-                                                   validation_split=validation_size, batch_size=batch_size)
-
-        # make training and validation dataset following the split
-        self.train_dataset = Subset(train_dataset, train_indices, None)
-        self.valid_dataset = Subset(train_dataset, val_indices, transform)
-
-        # get targets to compute indices
-        self.train_target = torch.tensor([train_dataset.targets[i] for i in train_indices])
-        self.valid_target = torch.tensor([train_dataset.targets[i] for i in val_indices])
         self.test_target = torch.tensor(self.test_dataset.targets)  # this does not work with torchvision < 0.2.2
+
+        if validation_size == 0:
+            self.train_dataset = train_dataset
+            self.valid_dataset = self.test_dataset
+            self.train_target = torch.tensor(train_dataset.targets)  # this does not work with torchvision < 0.2.2
+            self.valid_target = self.test_target
+        else:
+            # Creating data indices for training and validation splits
+            train_indices, val_indices = split_dataset(len(train_dataset.targets), True,
+                                                       validation_split=validation_size, batch_size=batch_size)
+
+            # make training and validation dataset following the split
+            self.train_dataset = Subset(train_dataset, train_indices, None)
+            self.valid_dataset = Subset(train_dataset, val_indices, transform)
+
+            # get targets to compute indices
+            self.train_target = torch.tensor([train_dataset.targets[i] for i in train_indices])
+            self.valid_target = torch.tensor([train_dataset.targets[i] for i in val_indices])
 
         if augmentation is not None:
             self.augmentation = torchvision.transforms.Compose([augmentation, transform])
@@ -54,15 +61,15 @@ class ICIFAR(AbstractIncrementalDataloader):
         self.iteration = 0
 
         # set additional parameters
-        self.num_cl_first = num_cl_first
-        self.num_cl_after = num_cl_after
+        self.num_cl_first = n_base
+        self.num_cl_after = n_incr
 
-        if num_cl_after == 0:
-            num_cl_after = 1
+        if n_incr == 0:
+            n_incr = 1
 
-        assert (100 - self.num_cl_first) % num_cl_after == 0, \
+        assert (100 - self.num_cl_first) % n_incr == 0, \
             "num_cl_after + N*num_cl_after must match the number of classes"
-        self.num_iteration_max = 1 + (100 - num_cl_first) // num_cl_after
+        self.num_iteration_max = 1 + (100 - n_incr) // n_incr
 
         # set additional parameters
         self.batch_size = batch_size

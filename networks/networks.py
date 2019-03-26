@@ -256,6 +256,11 @@ class CifarResNet(nn.Module):
         return out
 
 
+def cifar_resnet(pretrained=False, num_classes=1000):
+    model = CifarResNet(num_classes=num_classes)
+    return model
+
+
 def resnet18(pretrained=False, num_classes=1000):
     """Constructs a ResNet-18 model.
     Args:

@@ -1,8 +1,6 @@
 import visdom
 import numpy as np
 
-EPS = 10e-6
-
 
 class VisdomLogger:
     def __init__(self, path, name):
@@ -80,10 +78,14 @@ class VisdomLogger:
         for i in range(len(y)):
             conf[y[i], y_hat[i]] += 1
 
-        cn = conf.astype('float') / (conf.sum(axis=1)[:, np.newaxis] + EPS)
+        cm = conf.astype('float') / conf.sum(axis=1)[:, np.newaxis]
 
         self.vis.env = self.name + "_CF"
-        self.vis.heatmap(cn)
+        self.vis.heatmap(cm, opts={
+            'title': f'Confusion Matrix {self.iteration}',
+            'xlabel': 'Pred Class',
+            'ylabel': 'Real Class'}
+        )
         self.vis.env = self.name + "_TR"
 
         np.savetxt(self.path + f"/{self.name}CF{self.iteration}.csv", conf, delimiter=",")
