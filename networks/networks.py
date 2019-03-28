@@ -75,7 +75,6 @@ class BasicBlock(nn.Module):
     """
     RexNet basicblock (https://github.com/facebook/fb.resnet.torch/blob/master/models/resnet.lua)
     """
-
     def __init__(self, inplanes, planes, stride=1, downsample=None, relu=True):
         super(BasicBlock, self).__init__()
 
@@ -256,8 +255,67 @@ class CifarResNet(nn.Module):
         return out
 
 
+class WideResNet(nn.Module):
+    def __init__(self, resnet_block, widening_factor=4, num_classes=1000):
+        super(WideResNet, self).__init__()
+
+        self.block = nn.Conv2d
+        self.in_channel = 16
+
+        self.conv1 = self.block(3, self.in_channel, kernel_size=3, stride=1, padding=1, bias=False)
+        self.bn1 = nn.BatchNorm2d(self.in_channel)
+
+        self.relu = nn.ReLU()
+        self.layer1 = self._make_layer_(resnet_block, 64, widening_factor, stride=2)
+        self.layer2 = self._make_layer_(resnet_block, 128, widening_factor, stride=2)
+        self.layer3 = self._make_layer_(resnet_block, 256, widening_factor, stride=2)
+
+        self.avgpool = nn.AdaptiveAvgPool2d(1)
+
+        self.fc = nn.Linear(256, num_classes)
+        self.index = 0
+
+    def _make_layer_(self, resnet_block, planes, blocks, stride=1):
+        layers = []
+
+        downsample = None
+        if stride != 1 or self.inplanes != planes:
+            downsample = nn.Sequential(conv3x3(self.in_channel, planes, stride=stride),
+                                       nn.BatchNorm2d(planes))
+
+        layers.append(resnet_block(self.in_channel, planes, stride, downsample))
+        self.in_channel = planes
+
+        for i in range(1, blocks):
+            layers.append(resnet_block(self.in_channel, planes, stride=1))
+            self.in_channel = planes
+
+        return nn.Sequential(*layers)
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.relu(x)
+        x = self.layer1(x)
+        x = self.layer2(x)
+        x = self.layer3(x)
+
+        x = self.avgpool(x)
+        x = x.view(x.size(0), -1)
+
+        return x
+
+    def predict(self, x):
+        return self.fc(x)
+
+
 def cifar_resnet(pretrained=False, num_classes=1000):
     model = CifarResNet(num_classes=num_classes)
+    return model
+
+
+def wide_resnet(pretrained=False, num_classes=1000):
+    model = WideResNet(BasicBlock, num_classes=num_classes)
     return model
 
 

@@ -54,7 +54,7 @@ class ICIFAR(AbstractIncrementalDataloader):
         # get the order for incremental cifar
         if order_file is None:
             order_file = os.path.join(root, 'cifar-100-python', 'cifar_order.npy')
-        self.full_order = np.load(order_file)
+        self.full_order = np.genfromtxt(order_file, delimiter=",").astype(int)
         self.order = self.full_order[run_number]
 
         # Init parameters that will really be initialized in set_run

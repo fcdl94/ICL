@@ -78,7 +78,7 @@ class VisdomLogger:
         for i in range(len(y)):
             conf[y[i], y_hat[i]] += 1
 
-        cm = conf.astype('float') / conf.sum(axis=1)[:, np.newaxis]
+        cm = conf.astype('float') / (conf.sum(axis=1)+0.000001)[:, np.newaxis]
 
         self.vis.env = self.name + "_CF"
         self.vis.heatmap(cm, opts={

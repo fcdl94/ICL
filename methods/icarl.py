@@ -37,7 +37,8 @@ class ICarl(AbstractMethod):
         :param epochs: number of epochs to train the model
         :param device: "cuda" or "cpu"
         """
-        super().__init__(network=network, n_classes=n_classes, nb_base=n_base, nb_incr=n_incr, log=log, name=name)
+        super().__init__(network=network, n_classes=n_classes, nb_base=n_base, nb_incr=n_incr, log=log, name=name,
+                         lr_init=lr_init, decay=decay)
 
         self.network = network.to(device)
         self.network2 = self.network

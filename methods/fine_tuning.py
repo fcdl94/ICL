@@ -21,7 +21,7 @@ class FineTuning(AbstractMethod):
                  log="FT", name="FT", epochs=EPOCHS, factor=LR_FACTOR,
                  lr_init=LR, decay=DECAY, device=DEVICE, **trash):
 
-        super().__init__(network, n_classes, n_base, n_incr, log, name)
+        super().__init__(network, n_classes, n_base, n_incr, log, name, lr_init=lr_init, decay=decay)
 
         self.lr = lr_init
         self.decay = decay

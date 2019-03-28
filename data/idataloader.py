@@ -61,7 +61,7 @@ class IncrementalDataloader(AbstractIncrementalDataloader):
             self.full_order = [np.arange(self.num_classes)]  # if not specified go from zero to num_classes in order
             run_number = 0
         else:
-            self.full_order = np.load(os.path.join(root, order_file)).astype(int)
+            self.full_order = np.genfromtxt(os.path.join(root, order_file), delimiter=",").astype(int)
 
         # init parameters
         self.iteration = 0

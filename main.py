@@ -25,8 +25,6 @@ parser.add_argument('--from_run', default=0, type=int, help='Number of first run
 # network/training variables
 parser.add_argument('--pretrained', default=False, type=bool, help='If start with ImageNet pretraining or not')
 parser.add_argument('--epochs', default=None, type=int, help='The number of epochs to use')
-parser.add_argument('--lr', default=None, type=float, help='The initial learning rate to use')
-parser.add_argument('--decay', default=None, type=float, help='The decay to use')
 
 # method variables
 parser.add_argument('-m', '--method', default='icarl', help='Method to be tested')
@@ -41,7 +39,10 @@ config = conf.get_config(args.setting)
 
 method_name = args.method
 if args.log is None:
-    log = method_name
+    if args.config_file is None:
+        log = method_name
+    else:
+        log = args.config_file.split("/")[-1][:-5]
 else:
     log = args.log
 

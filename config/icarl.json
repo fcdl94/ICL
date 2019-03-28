@@ -1,9 +1,0 @@
-{
-  "mem_size":1300,
-  "distillation":true,
-  "lr_init": 2.0,
-  "decay": 0.00001,
-  "epochs": 70,
-  "device": "cuda",
-  "name":"ICARL"
-}
