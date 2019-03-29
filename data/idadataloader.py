@@ -190,8 +190,12 @@ class IDADataloader(AbstractIncrementalDataloader):
         classes = self.order[start_offset: self.offset(iteration)]
 
         dataset_full = self.test
-        indices = get_index_of_classes(self.test_target, classes)
-        dataset = Subset(dataset_full, indices)
+
+        if len(classes) == 0:  # handle the case where there are no base classes
+            dataset = Subset(dataset_full, [])
+        else:
+            indices = get_index_of_classes(self.test_target, classes)
+            dataset = Subset(dataset_full, indices)
 
         data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=self.workers)
         return data_loader

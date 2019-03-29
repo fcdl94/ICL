@@ -78,8 +78,8 @@ config = {
         'data_conf': {
             'target': 'GTSRB/Final Training/Images',
             'source': 'synthetic_data',
-            'n_base': 43,  # 1 base
-            'n_incr': 0,  # 3 incremental
+            'n_base': 0,  # 0 base
+            'n_incr': 43,  # 1 incremental
             'validation_size': 0.2
         },
         'network': cifar_resnet,
@@ -175,8 +175,8 @@ config = {
         'data_conf': {
             'target': 'sketchy/photo',
             'source': 'sketchy/sketch',
-            'n_base': 125,  # 1 base
-            'n_incr': 0,    # 0 incremental
+            'n_base': 0,  # 1 base
+            'n_incr': 125,    # 0 incremental
         },
         'network': wide_resnet,
         'dataset': IDADataloader

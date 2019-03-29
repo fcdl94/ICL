@@ -86,43 +86,44 @@ class ICarl(AbstractMethod):
 
         for iteration in range(start_iter, self.iteration_total):
 
-            # Prepare the training data for the current batch of classes
-            train_loader, valid_dataloader = dataset.next_iteration(x_protoset, y_protoset)
+            if self.nb_classes(iteration) > 0:  # handle the case of full DA, then 0 base class
+                # Prepare the training data for the current batch of classes
+                train_loader, valid_dataloader = dataset.next_iteration(x_protoset, y_protoset, iteration=iteration)
 
-            # TRAIN THIS ITERATION #
-            print('Batch of classes number {0} arrives ...'.format(iteration + 1))
+                # TRAIN THIS ITERATION #
+                print('Batch of classes number {0} arrives ...'.format(iteration + 1))
 
-            # train for N epochs (after each epoch validate)
-            self.incremental_fit(iteration, train_loader, valid_dataloader)
+                # train for N epochs (after each epoch validate)
+                self.incremental_fit(iteration, train_loader, valid_dataloader)
 
-            # END OF TRAINING FOR THIS ITERATION #
+                # END OF TRAINING FOR THIS ITERATION #
 
-            # UPDATE EXEMPLARS #
-            print('Updating exemplar set...')
-            x_protoset, y_protoset = self.update_exemplars(iteration)
+                # UPDATE EXEMPLARS #
+                print('Updating exemplar set...')
+                x_protoset, y_protoset = self.update_exemplars(iteration)
 
-            # Save training checkpoint
-            # torch.save({
-            #    'iteration': iteration,
-            #    'network': self.network.state_dict(),
-            #    'network2': self.network2.state_dict(),
-            #    'X': x_protoset,
-            #    'Y': y_protoset
-            # }, "checkpoint/iter_" + str(iteration) + "_checkpoint.pth.tar")
+                # Save training checkpoint
+                # torch.save({
+                #    'iteration': iteration,
+                #    'network': self.network.state_dict(),
+                #    'network2': self.network2.state_dict(),
+                #    'X': x_protoset,
+                #    'Y': y_protoset
+                # }, "checkpoint/iter_" + str(iteration) + "_checkpoint.pth.tar")
 
-            # COMPUTE ACCURACY ##
-            means = self.compute_means(iteration)
-            acc_cum = self.test(iteration, class_means=means, conf_matrix=True)
-            acc_new = self.test(iteration, class_means=means, cumulative=False)
-            acc_base = self.test(0, class_means=means)
+                # COMPUTE ACCURACY ##
+                means = self.compute_means(iteration)
+                acc_cum = self.test(iteration, class_means=means, conf_matrix=True)
+                acc_new = self.test(iteration, class_means=means, cumulative=False)
+                acc_base = self.test(0, class_means=means)
 
-            print_accuracy(METHODS, acc_base, acc_new, acc_cum)
+                print_accuracy(METHODS, acc_base, acc_new, acc_cum)
 
-            cumulative_accuracies.append(acc_cum)
+                cumulative_accuracies.append(acc_cum)
 
-            for i, name in enumerate(METHODS):
-                save_results(f"{self.log_folder}/{name}.csv",
-                             acc_base[i], acc_new[i], acc_cum[i])
+                for i, name in enumerate(METHODS):
+                    save_results(f"{self.log_folder}/{name}.csv",
+                                 acc_base[i], acc_new[i], acc_cum[i])
 
         acc_cum = []
         tot = self.iteration_total - 1

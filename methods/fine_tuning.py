@@ -51,34 +51,36 @@ class FineTuning(AbstractMethod):
             # Prepare the training data for the current batch of classes
             train_loader, valid_loader = dataset.next_iteration()
 
-            # TRAIN THIS ITERATION #
-            print('Batch of classes number {0} arrives ...'.format(iteration + 1))
+            if len(train_loader) > 0:  # To handle the case of nb_base = 0
 
-            # train for N epochs (after each epoch validate)
-            self.incremental_fit(iteration, train_loader, valid_loader)
+                # TRAIN THIS ITERATION #
+                print('Batch of classes number {0} arrives ...'.format(iteration + 1))
 
-            # END OF TRAINING FOR THIS ITERATION #
+                # train for N epochs (after each epoch validate)
+                self.incremental_fit(iteration, train_loader, valid_loader)
 
-            # Save training checkpoint
-            # torch.save({
-            #    'iteration': iteration,
-            #    'network': self.network.state_dict(),
-            # }, "checkpoint/iter_" + str(iteration) + "_checkpoint.pth.tar")
+                # END OF TRAINING FOR THIS ITERATION #
 
-            # COMPUTE ACCURACY ##
-            acc_cum = self.test(iteration)
-            acc_new = self.test(iteration, cumulative=False)
-            acc_base = self.test(0)
+                # Save training checkpoint
+                # torch.save({
+                #    'iteration': iteration,
+                #    'network': self.network.state_dict(),
+                # }, "checkpoint/iter_" + str(iteration) + "_checkpoint.pth.tar")
 
-            print_accuracy(["FT"], acc_base, acc_new, acc_cum)
+                # COMPUTE ACCURACY ##
+                acc_cum = self.test(iteration)
+                acc_new = self.test(iteration, cumulative=False)
+                acc_base = self.test(0)
 
-            cumulative_accuracies.append(acc_cum)
+                print_accuracy(["FT"], acc_base, acc_new, acc_cum)
 
-            i = 0
-            name = 'FT'
-            save_results(f"{self.log_folder}/{name}.csv", acc_base[i], acc_new[i], acc_cum[i])
+                cumulative_accuracies.append(acc_cum)
 
-            print("")
+                i = 0
+                name = 'FT'
+                save_results(f"{self.log_folder}/{name}.csv", acc_base[i], acc_new[i], acc_cum[i])
+
+                print("")
 
         acc_cum = []
         tot = self.iteration_total - 1
