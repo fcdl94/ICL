@@ -31,7 +31,7 @@ class DoubleDataset(torch.utils.data.Dataset):
 
 class IDADataloader:
 
-    def __init__(self, root, target, source,
+    def __init__(self, root, target, source, test,
                  n_base=10, n_incr=10,
                  augmentation=None, transform=None, validation_size=0.2,
                  order_file=None, batch_size=64, run_number=0, workers=1):
@@ -43,31 +43,44 @@ class IDADataloader:
 
         target = ImageFolder(os.path.join(root, target), None, None)
         source = ImageFolder(os.path.join(root, source), None, None)
+        test = ImageFolder(os.path.join(root, test), transform)
 
-        # Creating data indices for training and validation splits:
-        train_indices, val_indices = \
+        # Creating data indices for target training and validation splits:
+        target_train_indices, target_val_indices = \
             split_dataset(len(target.targets), True, validation_split=validation_size,
                           batch_size=batch_size)
 
+        # Creating data indices for source training and validation splits:
+        source_train_indices, source_val_indices = \
+            split_dataset(len(source.targets), True, validation_split=validation_size,
+                          batch_size=batch_size)
+
         # make training and validation dataset following the split
-        self.train = Subset(target, train_indices, None)     # returns images as PIL Image
-        self.valid = Subset(target, val_indices, transform)  # return tensors
-        self.test = self.valid                               # return tensors
-        self.source = source                                 # returns images as PIL Image
+        self.target_train = Subset(target, target_train_indices, None)     # returns images as PIL Image
+        self.target_valid = Subset(target, target_val_indices, transform)  # return tensors
+        self.source_train = Subset(source, source_train_indices, None)     # returns images as PIL Image
+        self.source_valid = Subset(source, source_val_indices, transform)  # return tensors
 
-        self.train_labels = torch.tensor([target.targets[i] for i in train_indices])
-        self.valid_labels = torch.tensor([target.targets[i] for i in val_indices])
-        self.test_labels = self.valid_labels
-        self.source_labels = torch.tensor(source.targets)
+        self.test = test  # return tensors
 
+        # catch training labels to compute the images of only some classes
+        self.target_train_labels = torch.tensor([target.targets[i] for i in target_train_indices])
+        self.target_valid_labels = torch.tensor([target.targets[i] for i in target_val_indices])
+        self.source_train_labels = torch.tensor([source.targets[i] for i in source_train_indices])
+        self.source_valid_labels = torch.tensor([source.targets[i] for i in source_val_indices])
+
+        self.test_labels = torch.tensor(test.targets)
+
+        # store transform and augmentation function
         self.augmentation = augmentation  # this works as data augmentation
         self.transform = transform  # this works as ToTensor, without changing the images.
 
+        # store num of classes
         self.num_classes = len(target.classes)
 
-        # get variable for this loader
+        # check the number of classes for incremental class learning (base + k*incr)
         self.num_cl_first = n_base  # N
-        self.num_cl_after = n_incr  # M
+        self.num_cl_after = n_incr  # k*M
 
         if n_incr == 0:
             n_incr = 1
@@ -106,13 +119,13 @@ class IDADataloader:
         idx_in_order = np.where(self.order == idx)[0]
 
         if idx_in_order >= self.num_cl_first:
-            dataset = self.source
-            target = self.source_labels
+            dataset = self.source_train
+            target = self.source_train_labels
         else:
-            dataset = self.train
-            target = self.train_labels
+            dataset = self.target_train
+            target = self.target_train_labels
 
-        # dataset[x.item()][0] is PIL Image (I'm not using any transform)
+        # dataset[x.item()][0] is PIL Image (I'm not using any transform for training datasets)
         images = [dataset[x.item()][0] for x in get_index_of_classes(target, [idx])]
 
         return images  # this is a list of PIL images
@@ -122,11 +135,11 @@ class IDADataloader:
         idx_in_order = np.where(self.order == idx)[0]
 
         if idx_in_order >= self.num_cl_first:
-            dataset = self.source
-            target = self.source_labels
+            dataset = self.source_train
+            target = self.source_train_labels
         else:
-            dataset = self.train
-            target = self.train_labels
+            dataset = self.target_train
+            target = self.target_train_labels
 
         indices = get_index_of_classes(target, [idx])
 
@@ -162,40 +175,39 @@ class IDADataloader:
             transform = self.transform
 
         if iteration == 0:  # we are in base classes
-            dataset_full = self.train
+            dataset_full = self.target_train
             classes = self.order[0: self.num_cl_first]
-            indices = get_index_of_classes(self.train_labels, classes)
+            indices = get_index_of_classes(self.target_train_labels, classes)
             train_dataset = Subset(dataset_full, indices, transform)
 
-            valid_indices = get_index_of_classes(self.valid_labels, classes)
-            valid_dataset = Subset(self.valid, valid_indices)
+            valid_indices = get_index_of_classes(self.target_valid_labels, classes)
+            valid_dataset = Subset(self.target_valid, valid_indices)
 
             train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=self.workers)
-            valid_loader = DataLoader(valid_dataset, batch_size=self.batch_size, shuffle=False,
-                                      num_workers=self.workers)
+            valid_loader = DataLoader(valid_dataset, batch_size=self.batch_size, shuffle=False,num_workers=self.workers)
 
         elif 0 < iteration < self.num_iteration_max:  # we are in the source classes, return the concat
-            dataset_full = self.source
+            dataset_full = self.source_train
             classes = self.order[self.offset(iteration-1): self.offset(iteration)]
-            indices = get_index_of_classes(self.source_labels, classes)
+            indices = get_index_of_classes(self.source_train_labels, classes)
             train_dataset = Subset(dataset_full, indices, transform)
 
-            valid_indices = get_index_of_classes(self.valid_labels, classes)
-            valid_dataset = Subset(self.valid, valid_indices)
+            valid_indices = get_index_of_classes(self.source_valid_labels, classes)
+            valid_dataset = Subset(self.source_valid, valid_indices)
 
-            if source_proto is not None:
+            if source_proto is not None:  # we should be in iteration > 1
                 # use the same transform of the dataset to augment the prototypes
                 dataset_prototypes = DatasetPrototypes(*source_proto, transform)
-                train_dataset += dataset_prototypes
+                train_dataset += dataset_prototypes  # combine train and prototype source dataset T^i + P^i
 
-            if target_proto is not None:
+            if target_proto is not None:  # we should be in iteration >= 1
                 # use the same transform of the dataset to augment the prototypes
-                target_prototypes = DatasetPrototypes(*target_proto, transform)
+                target_prototypes = DatasetPrototypes(*target_proto, transform)  # make protos dataset
                 target_dataset = target_prototypes
-                train_dataset = DoubleDataset(train_dataset, target_dataset)
+                train_dataset = DoubleDataset(train_dataset, target_dataset)  # make double ds to return both tuples
                 train_loader = DataLoader(train_dataset, batch_size=self.batch_size // 2, shuffle=True,
                                           num_workers=self.workers)
-            else:
+            else:  # we are not using target prototypes even if we are in iteration >= 1
                 train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True,
                                           num_workers=self.workers)
 

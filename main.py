@@ -31,7 +31,7 @@ parser.add_argument('-m', '--method', default='icarl', help='Method to be tested
 parser.add_argument('-d', '--da', default=None, help='Domain adaptation method')
 parser.add_argument('-l', '--log', default=None, help='Method name where are saved logs and results')
 parser.add_argument('-c', '--config_file', default=None, help='Config file where to get parameters for training')
-parser.add_argument('--seed', default=42, help='The random seed to use')
+parser.add_argument('--seed', default=42, type=int, help='The random seed to use')
 
 
 args = parser.parse_args()

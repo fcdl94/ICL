@@ -2,6 +2,10 @@ from networks.networks import *
 from data import *
 from torchvision import transforms
 
+gtsrb_train = 'GTSRB/Final_Training/Images'
+gtsrb_test = 'GTSRB/Final_Test'
+synt_sign = 'synthetic_data'
+
 config = {
     ############## CIFAR ###################
     'icifar': {
@@ -29,55 +33,37 @@ config = {
         'n_classes': 43,
         'n_features': 64,
         'data_conf': {
-            'target': 'GTSRB/Final Training/Images',
-            'n_base': 43,   # 1 base
-            'n_incr': 0,   # 0 incremental
+            'target': gtsrb_train,
+            'test': gtsrb_test,
+            'source': gtsrb_train,
+            'n_base': 0,  # 0 base
+            'n_incr': 43,  # 1 incremental
             'validation_size': 0.2
         },
         'network-type': "cifar",
-        'dataset': IncrementalDataloader
+        'dataset': IDADataloader
     },
     'igtsrb': {
         'n_classes': 43,
         'n_features': 64,
         'data_conf': {
-            'target': 'GTSRB/Final Training/Images',
-            'n_base': 13,   # 1 base
-            'n_incr': 10,   # 3 incremental
-        },
-        'network-type': "cifar",
-        'dataset': IncrementalDataloader
-    },
-    'syns': {
-        'n_classes': 43,
-        'n_features': 64,
-        'data_conf': {
-            'target': 'synthetic_data',
-            'n_base': 43,   # 1 base
-            'n_incr': 0,   # 0 incremental
+            'target': gtsrb_train,
+            'test': gtsrb_test,
+            'source': gtsrb_train,
+            'n_base': 13,  # 0 base
+            'n_incr': 10,  # 1 incremental
             'validation_size': 0.2
         },
         'network-type': "cifar",
-        'dataset': IncrementalDataloader
-    },
-    'isyns': {
-        'n_classes': 43,
-        'n_features': 64,
-        'data_conf': {
-            'target': 'synthetic_data',
-            'n_base': 13,  # 1 base
-            'n_incr': 10,  # 3 incremental
-            'validation_size': 0.2
-        },
-        'network-type': "cifar",
-        'dataset': IncrementalDataloader
+        'dataset': IDADataloader
     },
     'syns-to-gtsrb': {
         'n_classes': 43,
         'n_features': 64,
         'data_conf': {
-            'target': 'GTSRB/Final Training/Images',
-            'source': 'synthetic_data',
+            'target': gtsrb_train,
+            'test': gtsrb_test,
+            'source': synt_sign,
             'n_base': 0,  # 0 base
             'n_incr': 43,  # 1 incremental
             'validation_size': 0.2
@@ -89,8 +75,9 @@ config = {
         'n_classes': 43,
         'n_features': 64,
         'data_conf': {
-            'target': 'GTSRB/Final Training/Images',
-            'source': 'synthetic_data',
+            'target': gtsrb_train,
+            'test': gtsrb_test,
+            'source': synt_sign,
             'n_base': 13,  # 1 base
             'n_incr': 10,  # 3 incremental
             'validation_size': 0.2
@@ -98,7 +85,7 @@ config = {
         'network-type': "cifar",
         'dataset': IDADataloader
     },
-    ############# SKETCHY ####################
+    #TODO UPDATE! ############ Sketchy ####################
     'sketchy-ph': {
         'n_classes': 125,
         'n_features': 256,
@@ -216,12 +203,15 @@ def get_transform(name):
 
 def get_network(typ, da):
     if "cifar" in typ:
-        if "dial" in da:
-            return cifar_resnet_dial
-        elif da is None:
+        if da is None:
             return cifar_resnet
+        elif "dial" in da:
+            return cifar_resnet_dial
+
     elif "wide" in typ:
-        if "dial" in da:
+        if da is None:
+            return wide_resnet_dial
+        elif "dial" in da:
             return wide_resnet
         else:
             return wide_resnet_dial
@@ -261,5 +251,29 @@ old_config = {
         },
         'network': resnet18,
         'dataset': IDADataloader
-    }
+    },
+    'syns': {
+        'n_classes': 43,
+        'n_features': 64,
+        'data_conf': {
+            'target': synt_sign,
+            'n_base': 43,  # 1 base
+            'n_incr': 0,  # 0 incremental
+            'validation_size': 0.2
+        },
+        'network-type': "cifar",
+        'dataset': IncrementalDataloader
+    },
+    'isyns': {
+        'n_classes': 43,
+        'n_features': 64,
+        'data_conf': {
+            'target': synt_sign,
+            'n_base': 13,  # 1 base
+            'n_incr': 10,  # 3 incremental
+            'validation_size': 0.2
+        },
+        'network-type': "cifar",
+        'dataset': IncrementalDataloader
+    },
 }
