@@ -3,7 +3,7 @@ from data import *
 from torchvision import transforms
 
 config = {
-    # CIFAR
+    ############## CIFAR ###################
     'icifar': {
         'n_classes': 100,
         'n_features': 64,
@@ -11,7 +11,7 @@ config = {
             'n_base': 10,   # 1 base
             'n_incr': 10,   # 9 incremental
         },
-        'network': cifar_resnet,
+        'network-type': "cifar",
         'dataset': ICIFAR
     },
     'cifar': {
@@ -21,10 +21,10 @@ config = {
             'n_base': 100,   # 1 base
             'n_incr': 0,   # 0 incremental
         },
-        'network': cifar_resnet,
+        'network-type': "cifar",
         'dataset': ICIFAR
     },
-    # Traffic signs
+    ############ Traffic signs ###################
     'gtsrb': {
         'n_classes': 43,
         'n_features': 64,
@@ -34,7 +34,7 @@ config = {
             'n_incr': 0,   # 0 incremental
             'validation_size': 0.2
         },
-        'network': cifar_resnet,
+        'network-type': "cifar",
         'dataset': IncrementalDataloader
     },
     'igtsrb': {
@@ -45,7 +45,7 @@ config = {
             'n_base': 13,   # 1 base
             'n_incr': 10,   # 3 incremental
         },
-        'network': cifar_resnet,
+        'network-type': "cifar",
         'dataset': IncrementalDataloader
     },
     'syns': {
@@ -57,7 +57,7 @@ config = {
             'n_incr': 0,   # 0 incremental
             'validation_size': 0.2
         },
-        'network': cifar_resnet,
+        'network-type': "cifar",
         'dataset': IncrementalDataloader
     },
     'isyns': {
@@ -69,7 +69,7 @@ config = {
             'n_incr': 10,  # 3 incremental
             'validation_size': 0.2
         },
-        'network': cifar_resnet,
+        'network-type': "cifar",
         'dataset': IncrementalDataloader
     },
     'syns-to-gtsrb': {
@@ -82,7 +82,7 @@ config = {
             'n_incr': 43,  # 1 incremental
             'validation_size': 0.2
         },
-        'network': cifar_resnet,
+        'network-type': "cifar",
         'dataset': IDADataloader
     },
     'isyns-to-gtsrb': {
@@ -95,36 +95,10 @@ config = {
             'n_incr': 10,  # 3 incremental
             'validation_size': 0.2
         },
-        'network': cifar_resnet,
+        'network-type': "cifar",
         'dataset': IDADataloader
     },
-    # Office
-    'office-rw': {
-        'n_classes': 65,
-        'n_features': 512,
-        'data_conf': {
-            'target':  'office/Real World',
-            'n_base': 65,   # 1 base
-            'n_incr': 0,   # 0 incremental
-            'order_file': 'office_order.npy'
-        },
-        'network': resnet18,
-        'dataset': IncrementalDataloader
-    },
-    'ioffice-rw-pr': {
-        'n_classes': 65,
-        'n_features': 512,
-        'data_conf': {
-            'target': 'office/Real World',
-            'source': 'office/Product',
-            'n_base': 20,  # 1 base
-            'n_incr': 15,  # 3 incremental
-            'order_file': 'office/office_order.npy'
-        },
-        'network': resnet18,
-        'dataset': IDADataloader
-    },
-    # SKETCHY
+    ############# SKETCHY ####################
     'sketchy-ph': {
         'n_classes': 125,
         'n_features': 256,
@@ -133,7 +107,7 @@ config = {
             'n_base': 125,  # 1 base
             'n_incr': 0,    # 0 incremental
         },
-        'network': wide_resnet,
+        'network-type': "wide",
         'dataset': IncrementalDataloader
     },
     'isketchy-ph': {
@@ -144,7 +118,7 @@ config = {
             'n_base': 50,  # 1 base
             'n_incr': 25,    # 0 incremental
         },
-        'network': wide_resnet,
+        'network-type': "wide",
         'dataset': IncrementalDataloader
     },
     'sketchy-sk': {
@@ -155,7 +129,7 @@ config = {
             'n_base': 125,  # 1 base
             'n_incr': 0,    # 0 incremental
         },
-        'network': wide_resnet,
+        'network-type': "wide",
         'dataset': IncrementalDataloader
     },
     'isketchy-sk': {
@@ -166,7 +140,7 @@ config = {
             'n_base': 50,  # 1 base
             'n_incr': 25,  # 0 incremental
         },
-        'network': wide_resnet,
+        'network-type': "wide",
         'dataset': IncrementalDataloader
     },
     'sketchy-sk-to-ph': {
@@ -178,7 +152,7 @@ config = {
             'n_base': 0,  # 1 base
             'n_incr': 125,    # 0 incremental
         },
-        'network': wide_resnet,
+        'network-type': "wide",
         'dataset': IDADataloader
     },
     'isketchy-sk-to-ph': {
@@ -190,20 +164,8 @@ config = {
             'n_base': 50,  # 1 base
             'n_incr': 25,  # 0 incremental
         },
-        'network': wide_resnet,
+        'network-type': "wide",
         'dataset': IDADataloader
-    },
-    # dense
-    'dense-c': {
-        'n_classes': 40,
-        'n_features': 256,
-        'data_conf': {
-            'target': 'dense/caltech256',
-            'n_base': 40,  # 1 base
-            'n_incr': 0,  # 0 incremental
-        },
-        'network': wide_resnet,
-        'dataset': IncrementalDataloader
     }
 }
 
@@ -252,7 +214,52 @@ def get_transform(name):
     return transform, augmentation
 
 
+def get_network(typ, da):
+    if "cifar" in typ:
+        if "dial" in da:
+            return cifar_resnet_dial
+        elif da is None:
+            return cifar_resnet
+    elif "wide" in typ:
+        if "dial" in da:
+            return wide_resnet
+        else:
+            return wide_resnet_dial
+    else:
+        raise NotImplementedError
+
+
 def get_config(name):
     assert name in config, "Configuration name not found."
     config[name]['data_conf']['transform'], config[name]['data_conf']['augmentation'] = get_transform(name)
     return config[name]
+
+
+old_config = {
+    # Office
+    'office-rw': {
+        'n_classes': 65,
+        'n_features': 512,
+        'data_conf': {
+            'target': 'office/Real World',
+            'n_base': 65,  # 1 base
+            'n_incr': 0,  # 0 incremental
+            'order_file': 'office_order.npy'
+        },
+        'network': resnet18,
+        'dataset': IncrementalDataloader
+    },
+    'ioffice-rw-pr': {
+        'n_classes': 65,
+        'n_features': 512,
+        'data_conf': {
+            'target': 'office/Real World',
+            'source': 'office/Product',
+            'n_base': 20,  # 1 base
+            'n_incr': 15,  # 3 incremental
+            'order_file': 'office/office_order.npy'
+        },
+        'network': resnet18,
+        'dataset': IDADataloader
+    }
+}

@@ -1,6 +1,7 @@
 from .icarl import ICarl
 import json
 from .fine_tuning import FineTuning
+from .icarl_da import ICarlDA
 
 methods = ["icarl", "lwf", "finetuning"]
 
@@ -24,6 +25,8 @@ def get_method(m_name, config=None, **kwargs):
 
     if m_name.lower() == 'icarl':
         return ICarl(**pars)
+    if m_name.lower() == 'icarl-dial':
+        return ICarlDA(**pars)
     if m_name.lower() == 'lwf':
         return ICarl(**pars, mem_size=0)
     if m_name.lower() == 'finetuning':

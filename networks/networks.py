@@ -12,6 +12,7 @@ import torch.nn.functional as F
 import math
 import torch.utils.model_zoo as model_zoo
 from torchvision.models.resnet import Bottleneck
+from .dial import DomainAdaptationLayer as DAL
 
 from torch.nn import init
 
@@ -58,11 +59,11 @@ class DownsampleC(nn.Module):
 
 
 class DownsampleD(nn.Module):
-    def __init__(self, nIn, nOut, stride):
+    def __init__(self, nIn, nOut, stride, bn):
         super(DownsampleD, self).__init__()
         assert stride == 2
         self.conv = nn.Conv2d(nIn, nOut, kernel_size=2, stride=stride, padding=0, bias=False)
-        self.bn = nn.BatchNorm2d(nOut)
+        self.bn = bn(nOut)
 
     def forward(self, x):
         x = self.conv(x)
@@ -72,30 +73,36 @@ class DownsampleD(nn.Module):
 
 class BasicBlock(nn.Module):
     expansion = 1
-    """
-    RexNet basicblock (https://github.com/facebook/fb.resnet.torch/blob/master/models/resnet.lua)
-    """
-    def __init__(self, inplanes, planes, stride=1, downsample=None, relu=True):
+
+    def __init__(self, inplanes, planes, stride=1, downsample=None, dial=False, relu=True):
         super(BasicBlock, self).__init__()
 
+        self.dial = dial
+        if dial:
+            bn = DAL
+        else:
+            bn = nn.BatchNorm2d
+
         self.conv1 = conv3x3(inplanes, planes, stride)
-        self.bn1 = nn.BatchNorm2d(planes)
+        self.bn1 = bn(planes)
         self.relu = nn.ReLU(inplace=True)
         self.conv2 = conv3x3(planes, planes)
-        self.bn2 = nn.BatchNorm2d(planes)
+        self.bn2 = bn(planes)
         self.downsample = downsample
 
         self.stride = stride
         self.relu_flag = relu
 
-    def forward(self, x):
+    def forward(self, x, index=0):
         identity = x
 
         out = self.conv1(x)
         out = self.bn1(out)
+
         out = self.relu(out)
 
         out = self.conv2(out)
+
         out = self.bn2(out)
 
         if self.downsample is not None:
@@ -186,7 +193,7 @@ class CifarResNet(nn.Module):
     https://arxiv.org/abs/1512.03385.pdf
     """
 
-    def __init__(self, block=BasicBlock, depth=32, num_classes=100, channels=3):
+    def __init__(self, block=BasicBlock, depth=32, num_classes=100, channels=3, dial=False):
 
         super(CifarResNet, self).__init__()
 
@@ -194,54 +201,73 @@ class CifarResNet(nn.Module):
         assert (depth - 2) % 6 == 0, 'depth should be one of 20, 32, 44, 56, 110'
         layer_blocks = (depth - 2) // 6
 
+        self.dial = dial
+        if not dial:
+            bn = nn.BatchNorm2d
+        else:
+            bn = DAL
+
         self.num_classes = num_classes
 
         self.conv_1_3x3 = nn.Conv2d(channels, 16, kernel_size=3, stride=1, padding=1, bias=False)
-        self.bn_1 = nn.BatchNorm2d(16)
+        self.bn_1 = bn(16)
 
         self.inplanes = 16
-        self.stage_1 = self._make_layer(block, 16, layer_blocks, 1)
-        self.stage_2 = self._make_layer(block, 32, layer_blocks, 2)
-        self.stage_3 = self._make_layer(block, 64, layer_blocks, 2, last=True)
+        self.stage_1 = self._make_layer(block, 16, layer_blocks, 1, dial)
+        self.stage_2 = self._make_layer(block, 32, layer_blocks, 2, dial)
+        self.stage_3 = self._make_layer(block, 64, layer_blocks, 2, dial, last=True)
         self.avgpool = nn.AvgPool2d(8)
         self.linear = nn.Linear(64, num_classes)
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
-                n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
+                # n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
                 init.kaiming_normal_(m.weight, nonlinearity='relu')
                 # m.bias.data.zero_()
-            elif isinstance(m, nn.BatchNorm2d):
+            elif isinstance(m, nn.BatchNorm2d) or isinstance(m, DAL):
                 m.weight.data.fill_(1)
                 m.bias.data.zero_()
             elif isinstance(m, nn.Linear):
                 m.weight.data.normal_(0, math.sqrt(1. / 64.))
                 m.bias.data.zero_()
 
-    def _make_layer(self, block, planes, blocks, stride=1, last=False):
+    def _make_layer(self, block, planes, blocks, stride=1, dial=False, last=False):
         downsample = None
         if stride != 1 or self.inplanes != planes * block.expansion:
             downsample = DownsampleA(self.inplanes, planes * block.expansion, stride)
 
-        layers = []
-        layers.append(block(self.inplanes, planes, stride, downsample))
+        layers = [block(self.inplanes, planes, stride, downsample, dial=dial)]
+
         self.inplanes = planes * block.expansion
         if last:
             for i in range(1, blocks - 1):
-                layers.append(block(self.inplanes, planes))
-            layers.append(block(self.inplanes, planes, relu=False))
+                layers.append(block(self.inplanes, planes, dial=dial))
+            layers.append(block(self.inplanes, planes, dial=dial, relu=False))
 
         else:
             for i in range(1, blocks):
-                layers.append(block(self.inplanes, planes))
+                layers.append(block(self.inplanes, planes, dial=dial))
 
         return nn.Sequential(*layers)
+
+    def set_domain(self, domain):
+        for mod in self.modules():
+            if isinstance(mod, DAL):
+                mod.set_domain(domain)
+
+    def set_source(self):
+        self.set_domain(0)
+
+    def set_target(self):
+        self.set_domain(1)
 
     def forward(self, x):
 
         x = self.conv_1_3x3(x)
+
         x = self.bn_1(x)
         x = F.relu(x)
+
         x = self.stage_1(x)
         x = self.stage_2(x)
         x = self.stage_3(x)
@@ -256,41 +282,61 @@ class CifarResNet(nn.Module):
 
 
 class WideResNet(nn.Module):
-    def __init__(self, resnet_block, widening_factor=4, num_classes=1000):
+    def __init__(self, resnet_block, widening_factor=4, num_classes=1000, dial=False):
         super(WideResNet, self).__init__()
+
+        self.dial = dial
+        if not dial:
+            bn = nn.BatchNorm2d
+        else:
+            bn = DAL
 
         self.block = nn.Conv2d
         self.in_channel = 16
 
         self.conv1 = self.block(3, self.in_channel, kernel_size=3, stride=1, padding=1, bias=False)
-        self.bn1 = nn.BatchNorm2d(self.in_channel)
+        self.bn1 = bn(self.in_channel)
 
         self.relu = nn.ReLU()
-        self.layer1 = self._make_layer_(resnet_block, 64, widening_factor, stride=2)
-        self.layer2 = self._make_layer_(resnet_block, 128, widening_factor, stride=2)
-        self.layer3 = self._make_layer_(resnet_block, 256, widening_factor, stride=2)
+        self.layer1 = self._make_layer(resnet_block, 64, widening_factor, dial=dial, stride=2)
+        self.layer2 = self._make_layer(resnet_block, 128, widening_factor, dial=dial, stride=2)
+        self.layer3 = self._make_layer(resnet_block, 256, widening_factor, dial=dial, stride=2, last=True)
 
         self.avgpool = nn.AdaptiveAvgPool2d(1)
 
         self.fc = nn.Linear(256, num_classes)
         self.index = 0
 
-    def _make_layer_(self, resnet_block, planes, blocks, stride=1):
-        layers = []
-
+    def _make_layer(self, block, planes, blocks, dial=False, stride=1, last=False):
         downsample = None
         if stride != 1 or self.inplanes != planes:
-            downsample = nn.Sequential(conv3x3(self.in_channel, planes, stride=stride),
-                                       nn.BatchNorm2d(planes))
+            downsample = DownsampleD(self.inplanes, planes*block.expansion, stride,
+                                     nn.BatchNorm2d if not dial else DAL)
 
-        layers.append(resnet_block(self.in_channel, planes, stride, downsample))
-        self.in_channel = planes
+        layers = [block(self.in_channel, planes, stride, downsample)]
+        self.inplanes = planes * block.expansion
 
-        for i in range(1, blocks):
-            layers.append(resnet_block(self.in_channel, planes, stride=1))
-            self.in_channel = planes
+        if last:
+            for i in range(1, blocks - 1):
+                layers.append(block(self.inplanes, planes, dial=dial))
+            layers.append(block(self.inplanes, planes, dial=dial, relu=False))
+
+        else:
+            for i in range(1, blocks):
+                layers.append(block(self.inplanes, planes, dial=dial))
 
         return nn.Sequential(*layers)
+
+    def set_domain(self, domain):
+        for mod in self.modules():
+            if isinstance(mod, DAL):
+                mod.set_domain(domain)
+
+    def set_source(self):
+        self.set_domain(0)
+
+    def set_target(self):
+        self.set_domain(1)
 
     def forward(self, x):
         x = self.conv1(x)
@@ -314,8 +360,18 @@ def cifar_resnet(pretrained=False, num_classes=1000):
     return model
 
 
+def cifar_resnet_dial(pretrained=False, num_classes=1000):
+    model = CifarResNet(num_classes=num_classes, dial=True)
+    return model
+
+
 def wide_resnet(pretrained=False, num_classes=1000):
     model = WideResNet(BasicBlock, num_classes=num_classes)
+    return model
+
+
+def wide_resnet_dial(pretrained=False, num_classes=1000):
+    model = WideResNet(BasicBlock, num_classes=num_classes, dial=True)
     return model
 
 

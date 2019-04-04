@@ -28,6 +28,7 @@ parser.add_argument('--epochs', default=None, type=int, help='The number of epoc
 
 # method variables
 parser.add_argument('-m', '--method', default='icarl', help='Method to be tested')
+parser.add_argument('-d', '--da', default=None, help='Domain adaptation method')
 parser.add_argument('-l', '--log', default=None, help='Method name where are saved logs and results')
 parser.add_argument('-c', '--config_file', default=None, help='Config file where to get parameters for training')
 parser.add_argument('--seed', default=42, help='The random seed to use')
@@ -37,7 +38,10 @@ args = parser.parse_args()
 
 config = conf.get_config(args.setting)
 
-method_name = args.method
+if args.da is not None:
+    method_name = args.method + "-" + args.da
+else:
+    method_name = args.method
 if args.log is None:
     if args.config_file is None:
         log = method_name
@@ -48,7 +52,6 @@ else:
 
 n_base = config['data_conf']['n_base']
 n_incr = config['data_conf']['n_incr']
-# now start with the main
 
 # fix for reproducibility
 torch.manual_seed(args.seed)
@@ -58,7 +61,8 @@ for run in range(args.from_run, args.to_run):
     # get the data
     data = config['dataset'](args.root, **config['data_conf'], run_number=run, workers=8)
     # define network
-    network = config['network'](num_classes=config['n_classes'], pretrained=args.pretrained)
+    network = conf.get_network(config['network-type'], args.da)(num_classes=config['n_classes'],
+                                                                pretrained=args.pretrained)
     # define the method
     method = methods.get_method(method_name, config=args.config_file, network=network, n_classes=config['n_classes'],
                                 n_base=n_base, n_incr=n_incr, features=config['n_features'],
