@@ -31,19 +31,17 @@ class DoubleDataset(torch.utils.data.Dataset):
 
 class IDADataloader:
 
-    def __init__(self, root, target, source, test,
+    def __init__(self, root, target=None, source=None, test=None,
                  n_base=10, n_incr=10,
                  augmentation=None, transform=None, validation_size=0.2,
                  order_file=None, batch_size=64, run_number=0, workers=1):
         super().__init__()
-        # Incremental domain adaptation: N classes + M classes + M + M etc.
-        # where Domain(N) != Domain(M)
+        # Incremental domain adaptation: N classes + k_times*M classes
+        # where Domain(N) != Domain(M) (if M==N we recover ICL without DA)
 
         assert transform is not None, "You should pass a transform to transform Image into Tensor"
 
-        target = ImageFolder(os.path.join(root, target), None, None)
-        source = ImageFolder(os.path.join(root, source), None, None)
-        test = ImageFolder(os.path.join(root, test), transform)
+        target, source, test = self.make_datasets(root, target, source, test, transform)
 
         # Creating data indices for target training and validation splits:
         target_train_indices, target_val_indices = \
@@ -103,6 +101,12 @@ class IDADataloader:
         self.iteration = 0
         self.order = self.full_order[run_number]
         self.data_loader = None
+
+    def make_datasets(self, root, target, source, test, transform):
+        target = ImageFolder(os.path.join(root, target), None, None)
+        source = ImageFolder(os.path.join(root, source), None, None)
+        test = ImageFolder(os.path.join(root, test), transform)
+        return target, source, test
 
     @property
     def order(self):
@@ -244,3 +248,21 @@ class IDADataloader:
 
         data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=self.workers)
         return data_loader
+
+
+class CifarDataloader(IDADataloader):
+    def make_datasets(self, root, target, source, test, transform):
+        # FOR CIFAR! Load the dataset
+        target = torchvision.datasets.CIFAR100(root=root, train=True, download=False, transform=None)
+        source = target
+        test = torchvision.datasets.CIFAR100(root=root, train=False, download=False, transform=transform)
+        return target, source, test
+
+
+class SingleDataloader(IDADataloader):
+    def make_datasets(self, root, target, source, test, transform):
+        target = ImageFolder(os.path.join(root, target), None, None)
+        source = target
+        test = ImageFolder(os.path.join(root, test), transform)
+
+        return target, source, test

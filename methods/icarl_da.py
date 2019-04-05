@@ -26,7 +26,7 @@ if torch.cuda.is_available():
 class ICarlDA(AbstractMethod):
 
     def __init__(self, network, n_classes=100, n_base=10, n_incr=10,
-                 mem_size=MEM_SIZE, distillation=True, features=64,
+                 target_mem_size=ALL, source_mem_size=MEM_SIZE, distillation=True, features=64,
                  lr_init=LR, decay=DECAY, epochs=EPOCHS, device=DEVICE,
                  log="ICARL", name="ICARL", **trash):
 
@@ -42,8 +42,8 @@ class ICarlDA(AbstractMethod):
         self.dataset = None
 
         # method variables
-        self.mem_size_target = ALL
-        self.mem_size_source = mem_size
+        self.mem_size_target = target_mem_size
+        self.mem_size_source = source_mem_size
 
         self.prototypes_target = None  # list of target PIL images
         self.prototypes_source = None  # list of source PIL images

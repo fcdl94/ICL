@@ -1,33 +1,54 @@
 from networks.networks import *
 from data import *
 from torchvision import transforms
+from methods.icarl import ICarl
+import json
+from methods.fine_tuning import FineTuning
+from methods.icarl_da import ICarlDA
+
 
 gtsrb_train = 'GTSRB/Final_Training/Images'
 gtsrb_test = 'GTSRB/Final_Test'
 synt_sign = 'synthetic_data'
 
+sk_ph_train = 'sketchy/photo_train'
+sk_ph_test = 'sketchy/photo_test'
+sk_ph_full = 'sketchy/photo'
+sk_sk_train = 'sketchy/sketch_train'
+sk_sk_test = 'sketchy/sketch_test'
+sk_sk_full = 'sketchy/sketch'
+
 config = {
-    ############## CIFAR ###################
+    ############     CIFAR     ###################
     'icifar': {
         'n_classes': 100,
         'n_features': 64,
         'data_conf': {
+            'target': None,
+            'test': None,
+            'source': None,
+            'validation_size': 0.2,
             'n_base': 10,   # 1 base
             'n_incr': 10,   # 9 incremental
         },
         'network-type': "cifar",
-        'dataset': ICIFAR
-    },
+        'dataset': CifarDataloader
+    },  # Incremental CIFAR - no DA (10 - 9*10)
     'cifar': {
         'n_classes': 100,
         'n_features': 64,
         'data_conf': {
+            'target': None,
+            'test': None,
+            'source': None,
+            'validation_size': 0.2,
             'n_base': 100,   # 1 base
-            'n_incr': 0,   # 0 incremental
+            'n_incr': 0,     # 0 incremental
         },
         'network-type': "cifar",
-        'dataset': ICIFAR
-    },
+        'dataset': CifarDataloader
+    },   # traditional CIFAR - no DA, no ICL
+
     ############ Traffic signs ###################
     'gtsrb': {
         'n_classes': 43,
@@ -35,42 +56,42 @@ config = {
         'data_conf': {
             'target': gtsrb_train,
             'test': gtsrb_test,
-            'source': gtsrb_train,
+            'source': None,
             'n_base': 0,  # 0 base
             'n_incr': 43,  # 1 incremental
             'validation_size': 0.2
         },
         'network-type': "cifar",
-        'dataset': IDADataloader
-    },
+        'dataset': SingleDataloader
+    },           # traditional setting, no DA, no ICL
     'igtsrb': {
         'n_classes': 43,
         'n_features': 64,
         'data_conf': {
             'target': gtsrb_train,
             'test': gtsrb_test,
-            'source': gtsrb_train,
+            'source': None,
             'n_base': 13,  # 0 base
             'n_incr': 10,  # 1 incremental
             'validation_size': 0.2
         },
         'network-type': "cifar",
-        'dataset': IDADataloader
-    },
-    'syns-to-gtsrb': {
+        'dataset': SingleDataloader
+    },          # ICL setting (13 - 3*10)
+    'syns-to-gtsrb': {  # dummy setting, just to check if there's Domain shift
         'n_classes': 43,
         'n_features': 64,
         'data_conf': {
-            'target': gtsrb_train,
+            'target': synt_sign,
             'test': gtsrb_test,
-            'source': synt_sign,
-            'n_base': 0,  # 0 base
-            'n_incr': 43,  # 1 incremental
+            'source': None,
+            'n_base': 43,  # 0 base
+            'n_incr': 0,  # 1 incremental
             'validation_size': 0.2
         },
         'network-type': "cifar",
-        'dataset': IDADataloader
-    },
+        'dataset': SingleDataloader
+    },   # full DA setting
     'isyns-to-gtsrb': {
         'n_classes': 43,
         'n_features': 64,
@@ -84,77 +105,143 @@ config = {
         },
         'network-type': "cifar",
         'dataset': IDADataloader
-    },
-    #TODO UPDATE! ############ Sketchy ####################
+    },  # ICL+DA setting (13 - 3*10)
+
+    #TODO MAKE SPLIT in DATA! ############ Sketchy ####################
     'sketchy-ph': {
         'n_classes': 125,
         'n_features': 256,
         'data_conf': {
-            'target': 'sketchy/photo',
+            'target': sk_ph_train,
+            'test': sk_ph_test,
             'n_base': 125,  # 1 base
             'n_incr': 0,    # 0 incremental
+            'validation_size': 0.2
         },
         'network-type': "wide",
-        'dataset': IncrementalDataloader
-    },
+        'dataset': SingleDataloader
+    },  # traditional setting, no DA, no ICL, on Photo
     'isketchy-ph': {
         'n_classes': 125,
         'n_features': 256,
         'data_conf': {
-            'target': 'sketchy/photo',
+            'target': sk_ph_train,
+            'test': sk_ph_test,
             'n_base': 50,  # 1 base
-            'n_incr': 25,    # 0 incremental
+            'n_incr': 25,  # 0 incremental
+            'validation_size': 0.2
         },
         'network-type': "wide",
-        'dataset': IncrementalDataloader
-    },
+        'dataset': SingleDataloader
+    },  # ICL setting on photo (50 - 3*25)
     'sketchy-sk': {
         'n_classes': 125,
         'n_features': 256,
         'data_conf': {
-            'target': 'sketchy/sketch',
+            'target': sk_sk_train,
+            'test': sk_sk_test,
             'n_base': 125,  # 1 base
-            'n_incr': 0,    # 0 incremental
+            'n_incr': 0,  # 0 incremental
+            'validation_size': 0.2
         },
         'network-type': "wide",
-        'dataset': IncrementalDataloader
-    },
+        'dataset': SingleDataloader
+    },  # traditional setting, no DA, no ICL, on Sketch
     'isketchy-sk': {
         'n_classes': 125,
         'n_features': 256,
         'data_conf': {
-            'target': 'sketchy/sketch',
+            'target': sk_sk_train,
+            'test': sk_sk_test,
             'n_base': 50,  # 1 base
-            'n_incr': 25,  # 0 incremental
+            'n_incr': 25,  # 3 incremental
+            'validation_size': 0.2
         },
         'network-type': "wide",
-        'dataset': IncrementalDataloader
-    },
+        'dataset': SingleDataloader
+    },  # ICL setting on Sketch (50 - 3*25)
     'sketchy-sk-to-ph': {
         'n_classes': 125,
         'n_features': 256,
         'data_conf': {
-            'target': 'sketchy/photo',
-            'source': 'sketchy/sketch',
-            'n_base': 0,  # 1 base
-            'n_incr': 125,    # 0 incremental
+            'target': sk_sk_full,
+            'test': sk_ph_test,
+            'n_base': 125,  # 1 base
+            'n_incr': 0,    # 0 incremental
+            'validation_size': 0.2
         },
         'network-type': "wide",
-        'dataset': IDADataloader
-    },
+        'dataset': SingleDataloader
+    },  # full DA setting Sketch -> Photo
     'isketchy-sk-to-ph': {
         'n_classes': 125,
         'n_features': 256,
         'data_conf': {
-            'target': 'sketchy/photo',
-            'source': 'sketchy/sketch',
+            'target': sk_ph_train,
+            'source': sk_sk_full,
+            'test': sk_ph_test,
             'n_base': 50,  # 1 base
             'n_incr': 25,  # 0 incremental
         },
         'network-type': "wide",
         'dataset': IDADataloader
-    }
+    },  # ICL+DA Sketch -> Photo (50 - 3*25)
+    'sketchy-ph-to-sk': {
+        'n_classes': 125,
+        'n_features': 256,
+        'data_conf': {
+            'target': sk_ph_full,
+            'test': sk_sk_test,
+            'n_base': 125,  # 1 base
+            'n_incr': 0,  # 0 incremental
+            'validation_size': 0.2
+        },
+        'network-type': "wide",
+        'dataset': SingleDataloader
+    },   # full DA setting Photo -> Sketch
+    'isketchy-ph-to-sk': {
+        'n_classes': 125,
+        'n_features': 256,
+        'data_conf': {
+            'target': sk_sk_train,
+            'source': sk_ph_full,
+            'test': sk_sk_test,
+            'n_base': 50,  # 1 base
+            'n_incr': 25,  # 0 incremental
+        },
+        'network-type': "wide",
+        'dataset': IDADataloader
+    }  # ICL+DA Photo -> Sketch (50 - 3*25)
 }
+
+
+def __parse_config__(config):
+    pars = {}
+
+    if config is not None:
+        print("Using config file: " + config)
+        with open(config, "r") as read_file:
+            pars = json.load(read_file)
+    return pars
+
+
+def get_method(m_name, config=None, **kwargs):
+
+    pars = __parse_config__(config)
+
+    for i in kwargs:
+        pars[i] = kwargs[i]
+
+    if m_name.lower() == 'icarl-single':
+        return ICarl(**pars)
+    if m_name.lower() == 'icarl':
+        return ICarlDA(**pars)
+    if m_name.lower() == 'lwf':
+        return ICarl(**pars, mem_size=0)
+    if m_name.lower() == 'finetuning':
+        return FineTuning(**pars)
+
+    assert True, f"There is no methods called {m_name}."
 
 
 def get_transform(name):

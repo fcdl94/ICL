@@ -64,8 +64,8 @@ for run in range(args.from_run, args.to_run):
     network = conf.get_network(config['network-type'], args.da)(num_classes=config['n_classes'],
                                                                 pretrained=args.pretrained)
     # define the method
-    method = methods.get_method(method_name, config=args.config_file, network=network, n_classes=config['n_classes'],
-                                n_base=n_base, n_incr=n_incr, features=config['n_features'],
-                                log=f"logs/{args.setting}/run{run}/{log}", name=f"{args.setting}-{run}-{log}")
+    method = conf.get_method(method_name, config=args.config_file, network=network, n_classes=config['n_classes'],
+                             n_base=n_base, n_incr=n_incr, features=config['n_features'],
+                             log=f"logs/{args.setting}/run{run}/{log}", name=f"{args.setting}-{run}-{log}")
     # run fit!
     acc = method.fit(data, epochs=args.epochs)

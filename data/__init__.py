@@ -1,3 +1,1 @@
-from .iCIFAR import ICIFAR
-from .idadataloader import IDADataloader
-from .idataloader import IncrementalDataloader
+from .idadataloader import IDADataloader, CifarDataloader, SingleDataloader
