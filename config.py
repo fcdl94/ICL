@@ -10,6 +10,7 @@ from methods.icarl_da import ICarlDA
 gtsrb_train = 'GTSRB/Final_Training/Images'
 gtsrb_test = 'GTSRB/Final_Test'
 synt_sign = 'synthetic_data'
+gtsrb_order = 'GTSRB/gtsrb_order.csv'
 
 sk_ph_train = 'sketchy/photo_train'
 sk_ph_test = 'sketchy/photo_test'
@@ -17,6 +18,7 @@ sk_ph_full = 'sketchy/photo'
 sk_sk_train = 'sketchy/sketch_train'
 sk_sk_test = 'sketchy/sketch_test'
 sk_sk_full = 'sketchy/sketch'
+sk_order = 'sketchy/sketchy_order.csv'
 
 config = {
     ############     CIFAR     ###################
@@ -59,7 +61,8 @@ config = {
             'source': None,
             'n_base': 0,  # 0 base
             'n_incr': 43,  # 1 incremental
-            'validation_size': 0.2
+            'validation_size': 0.2,
+            'order_file': gtsrb_order,
         },
         'network-type': "cifar",
         'dataset': SingleDataloader
@@ -73,7 +76,8 @@ config = {
             'source': None,
             'n_base': 13,  # 0 base
             'n_incr': 10,  # 1 incremental
-            'validation_size': 0.2
+            'validation_size': 0.2,
+            'order_file': gtsrb_order,
         },
         'network-type': "cifar",
         'dataset': SingleDataloader
@@ -87,7 +91,8 @@ config = {
             'source': None,
             'n_base': 43,  # 0 base
             'n_incr': 0,  # 1 incremental
-            'validation_size': 0.2
+            'validation_size': 0.2,
+            'order_file': gtsrb_order,
         },
         'network-type': "cifar",
         'dataset': SingleDataloader
@@ -101,7 +106,8 @@ config = {
             'source': synt_sign,
             'n_base': 13,  # 1 base
             'n_incr': 10,  # 3 incremental
-            'validation_size': 0.2
+            'validation_size': 0.2,
+            'order_file': gtsrb_order,
         },
         'network-type': "cifar",
         'dataset': IDADataloader
@@ -116,7 +122,8 @@ config = {
             'test': sk_ph_test,
             'n_base': 125,  # 1 base
             'n_incr': 0,    # 0 incremental
-            'validation_size': 0.2
+            'validation_size': 0.2,
+            'order_file': sk_order,
         },
         'network-type': "wide",
         'dataset': SingleDataloader
@@ -129,7 +136,8 @@ config = {
             'test': sk_ph_test,
             'n_base': 50,  # 1 base
             'n_incr': 25,  # 0 incremental
-            'validation_size': 0.2
+            'validation_size': 0.2,
+            'order_file': sk_order,
         },
         'network-type': "wide",
         'dataset': SingleDataloader
@@ -142,7 +150,8 @@ config = {
             'test': sk_sk_test,
             'n_base': 125,  # 1 base
             'n_incr': 0,  # 0 incremental
-            'validation_size': 0.2
+            'validation_size': 0.2,
+            'order_file': sk_order,
         },
         'network-type': "wide",
         'dataset': SingleDataloader
@@ -155,7 +164,8 @@ config = {
             'test': sk_sk_test,
             'n_base': 50,  # 1 base
             'n_incr': 25,  # 3 incremental
-            'validation_size': 0.2
+            'validation_size': 0.2,
+            'order_file': sk_order,
         },
         'network-type': "wide",
         'dataset': SingleDataloader
@@ -168,7 +178,8 @@ config = {
             'test': sk_ph_test,
             'n_base': 125,  # 1 base
             'n_incr': 0,    # 0 incremental
-            'validation_size': 0.2
+            'validation_size': 0.2,
+            'order_file': sk_order,
         },
         'network-type': "wide",
         'dataset': SingleDataloader
@@ -182,6 +193,8 @@ config = {
             'test': sk_ph_test,
             'n_base': 50,  # 1 base
             'n_incr': 25,  # 0 incremental
+            'validation_size': 0.2,
+            'order_file': sk_order,
         },
         'network-type': "wide",
         'dataset': IDADataloader
@@ -194,7 +207,8 @@ config = {
             'test': sk_sk_test,
             'n_base': 125,  # 1 base
             'n_incr': 0,  # 0 incremental
-            'validation_size': 0.2
+            'validation_size': 0.2,
+            'order_file': sk_order,
         },
         'network-type': "wide",
         'dataset': SingleDataloader
@@ -208,6 +222,8 @@ config = {
             'test': sk_sk_test,
             'n_base': 50,  # 1 base
             'n_incr': 25,  # 0 incremental
+            'validation_size': 0.2,
+            'order_file': sk_order,
         },
         'network-type': "wide",
         'dataset': IDADataloader
@@ -237,7 +253,7 @@ def get_method(m_name, config=None, **kwargs):
     if m_name.lower() == 'icarl':
         return ICarlDA(**pars)
     if m_name.lower() == 'lwf':
-        return ICarl(**pars, mem_size=0)
+        return ICarlDA(**pars, protos=False)
     if m_name.lower() == 'finetuning':
         return FineTuning(**pars)
 
@@ -310,57 +326,3 @@ def get_config(name):
     assert name in config, "Configuration name not found."
     config[name]['data_conf']['transform'], config[name]['data_conf']['augmentation'] = get_transform(name)
     return config[name]
-
-
-old_config = {
-    # Office
-    'office-rw': {
-        'n_classes': 65,
-        'n_features': 512,
-        'data_conf': {
-            'target': 'office/Real World',
-            'n_base': 65,  # 1 base
-            'n_incr': 0,  # 0 incremental
-            'order_file': 'office_order.npy'
-        },
-        'network': resnet18,
-        'dataset': IncrementalDataloader
-    },
-    'ioffice-rw-pr': {
-        'n_classes': 65,
-        'n_features': 512,
-        'data_conf': {
-            'target': 'office/Real World',
-            'source': 'office/Product',
-            'n_base': 20,  # 1 base
-            'n_incr': 15,  # 3 incremental
-            'order_file': 'office/office_order.npy'
-        },
-        'network': resnet18,
-        'dataset': IDADataloader
-    },
-    'syns': {
-        'n_classes': 43,
-        'n_features': 64,
-        'data_conf': {
-            'target': synt_sign,
-            'n_base': 43,  # 1 base
-            'n_incr': 0,  # 0 incremental
-            'validation_size': 0.2
-        },
-        'network-type': "cifar",
-        'dataset': IncrementalDataloader
-    },
-    'isyns': {
-        'n_classes': 43,
-        'n_features': 64,
-        'data_conf': {
-            'target': synt_sign,
-            'n_base': 13,  # 1 base
-            'n_incr': 10,  # 3 incremental
-            'validation_size': 0.2
-        },
-        'network-type': "cifar",
-        'dataset': IncrementalDataloader
-    },
-}
