@@ -1,11 +1,12 @@
 import os
 from abc import ABC, abstractmethod
 from .logger import VisdomLogger
+import logging
 
 
 def log_training(epoch, train_loss, train_acc, valid_loss, valid_acc):
-    print(f"Epoch {epoch + 1:3d} : Train Loss {train_loss:.6f}, Train Acc {train_acc:.2f}\n"
-          f"          : Valid Loss {valid_loss:.6f}, Valid Acc {valid_acc:.2f}")
+    logging.debug(f"Epoch {epoch + 1:3d} : Train Loss {train_loss:.6f}, Train Acc {train_acc:.2f}\n"
+                  f"          : Valid Loss {valid_loss:.6f}, Valid Acc {valid_acc:.2f}")
 
 
 def save_results(file, acc_base, acc_new, acc_cum):
@@ -33,16 +34,16 @@ def create_log_folder(log):
 
 
 def print_accuracy(methods, acc_base, acc_new, acc_cum):
-    print("Cumulative results")
+    logging.info("Cumulative results")
     for i, m in enumerate(methods):
-        print(f"  top 1 accuracy {m:<15}:\t{acc_cum[i]:.2f}")
-    print("New batch results")
+        logging.info(f"  top 1 accuracy {m:<15}:\t{acc_cum[i]:.2f}")
+    logging.info("New batch results")
     for i, m in enumerate(methods):
-        print(f"  top 1 accuracy {m:<15}:\t{acc_new[i]:.2f}")
-    print("First results")
+        logging.info(f"  top 1 accuracy {m:<15}:\t{acc_new[i]:.2f}")
+    logging.info("First results")
     for i, m in enumerate(methods):
-        print(f"  top 1 accuracy {m:<15}:\t{acc_base[i]:.2f}")
-    print("")
+        logging.info(f"  top 1 accuracy {m:<15}:\t{acc_base[i]:.2f}")
+    logging.info("")
 
 
 class AbstractMethod(ABC):
@@ -61,6 +62,7 @@ class AbstractMethod(ABC):
         create_log_folder(log)
         self.logger = VisdomLogger(self.log_folder, name)
 
+        logging.debug(f"Starting the method {name}")
         self.name = name
         self.dataset = None
 

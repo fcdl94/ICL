@@ -1,6 +1,6 @@
 import visdom
 import numpy as np
-
+import logging
 
 class VisdomLogger:
     def __init__(self, path, name):
@@ -19,8 +19,8 @@ class VisdomLogger:
         self.valid_acc = []
 
     def log_training(self, epoch, train_loss, train_acc, valid_loss, valid_acc, iteration=0):
-        print(f"Epoch {epoch + 1:3d} : Train Loss {train_loss:.6f}, Train Acc {train_acc:.2f}\n"
-              f"          : Valid Loss {valid_loss:.6f}, Valid Acc {valid_acc:.2f}")
+        logging.debug(f"Epoch {epoch + 1:3d} : Train Loss {train_loss:.6f}, Train Acc {train_acc:.2f}\n"
+                     f"          : Valid Loss {valid_loss:.6f}, Valid Acc {valid_acc:.2f}")
 
         if self.iteration != iteration:
             self.reset_stat()

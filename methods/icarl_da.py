@@ -9,6 +9,7 @@ import copy
 from datetime import datetime
 from scipy.spatial.distance import cdist
 from .common import *
+import logging
 
 ALL = 1000000
 LR = 2.
@@ -78,16 +79,16 @@ class ICarlDA(AbstractMethod):
                 train_loader, valid_dataloader = dataset.next_iteration(target_proto=self.prototypes_target,
                                                                         source_proto=self.prototypes_source,
                                                                         iteration=iteration)
-            print(f'{"Source" if iteration>0 else "Target"} batch {iteration} samples arrives ...')
+            logging.info(f'{"Source" if iteration>0 else "Target"} batch {iteration} samples arrives ...')
             self.incremental_fit(iteration, train_loader, valid_dataloader)
 
             if self.protos:
-                print('Updating exemplar set ...')
+                logging.info('Updating exemplar set ...')
                 if iteration == 0:
                     self.prototypes_target = self.update_exemplars(iteration)
                 else:
                     self.prototypes_source = self.update_exemplars(iteration)
-                print('Computing class means ...')
+                logging.info('Computing class means ...')
                 means = self.compute_means(iteration)
             else:
                 means = None
@@ -99,6 +100,10 @@ class ICarlDA(AbstractMethod):
             print_accuracy(METHODS, acc_base, acc_new, acc_cum)
 
             cumulative_accuracies.append(acc_cum)
+
+            for i, name in enumerate(METHODS):
+                save_results(f"{self.log_folder}/{name}.csv",
+                             acc_base[i], acc_new[i], acc_cum[i])
 
         acc_cum = []
         tot = self.iteration_total - 1
@@ -260,10 +265,10 @@ class ICarlDA(AbstractMethod):
             target_total += [i.item() for i in targets_prep]
 
         # use the logits
-        top1_acc_list[0] = np.average(stat_icarl) * 100. if class_means else 0.     # ICarl
-        top1_acc_list[1] = np.average(stat_hb1) * 100.                              # Hybrid 1
-        top1_acc_list[2] = np.average(stat_ncm) * 100. if class_means else 0.       # NCM
-        top1_acc_list[3] = np.average(stat_icarl_i) * 100. if class_means else 0.   # ICaRL inv
+        top1_acc_list[0] = np.average(stat_icarl) * 100. if class_means is not None else 0.     # ICarl
+        top1_acc_list[1] = np.average(stat_hb1) * 100.                                          # Hybrid 1
+        top1_acc_list[2] = np.average(stat_ncm) * 100. if class_means is not None else 0.       # NCM
+        top1_acc_list[3] = np.average(stat_icarl_i) * 100. if class_means is not None else 0.   # ICaRL inv
         # print confusion matrix
         if conf_matrix:
             self.logger.confusion_matrix(self.reorder_target(target_total),

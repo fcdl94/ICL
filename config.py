@@ -59,8 +59,8 @@ config = {
             'target': gtsrb_train,
             'test': gtsrb_test,
             'source': None,
-            'n_base': 0,  # 0 base
-            'n_incr': 43,  # 1 incremental
+            'n_base': 43,  # 0 base
+            'n_incr': 0,  # 1 incremental
             'validation_size': 0.2,
             'order_file': gtsrb_order,
         },
@@ -113,7 +113,7 @@ config = {
         'dataset': IDADataloader
     },  # ICL+DA setting (13 - 3*10)
 
-    #TODO MAKE SPLIT in DATA! ############ Sketchy ####################
+    ############# Sketchy ####################
     'sketchy-ph': {
         'n_classes': 125,
         'n_features': 256,
@@ -257,7 +257,7 @@ def get_method(m_name, config=None, **kwargs):
     if m_name.lower() == 'finetuning':
         return FineTuning(**pars)
 
-    assert True, f"There is no methods called {m_name}."
+    assert False, f"There is no methods called {m_name}."
 
 
 def get_transform(name):

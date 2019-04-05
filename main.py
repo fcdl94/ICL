@@ -1,9 +1,9 @@
-import methods
 import argparse
 import config as conf
 import os
 import torch
 import numpy as np
+import logging
 
 if not os.path.exists("checkpoint"):
     os.mkdir("checkpoint")
@@ -42,6 +42,7 @@ if args.da is not None:
     method_name = args.method + "-" + args.da
 else:
     method_name = args.method
+
 if args.log is None:
     if args.config_file is None:
         log = method_name
@@ -58,13 +59,17 @@ torch.manual_seed(args.seed)
 np.random.seed(seed=args.seed)
 
 for run in range(args.from_run, args.to_run):
+    # print(f"Logs will be saved in logs/{args.setting}/run{run}/{log}.train")
+    logging.basicConfig(level=logging.DEBUG, format="%(message)s"
+                        )  # filename=f"logs/{args.setting}/run{run}/{log}.train", filemode='a',
+
     # get the data
     data = config['dataset'](args.root, **config['data_conf'], run_number=run, workers=8)
     # define network
     network = conf.get_network(config['network-type'], args.da)(num_classes=config['n_classes'],
                                                                 pretrained=args.pretrained)
     # define the method
-    method = conf.get_method(method_name, config=args.config_file, network=network, n_classes=config['n_classes'],
+    method = conf.get_method(args.method, config=args.config_file, network=network, n_classes=config['n_classes'],
                              n_base=n_base, n_incr=n_incr, features=config['n_features'],
                              log=f"logs/{args.setting}/run{run}/{log}", name=f"{args.setting}-{run}-{log}")
     # run fit!
