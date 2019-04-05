@@ -135,76 +135,8 @@ class ICarlDA(AbstractMethod):
         scheduler = MultiStepLR(optimizer, steps, self.lr_factor)
 
         for epoch in range(self.epochs):
-            self.network.train()
-            train_loss = 0
-            train_correct = 0
-            train_total = 0
-            scheduler.step()
-
-            if iteration == 0 or not self.protos:  # if I DON'T use protos (I don't use them in first iteration as well)
-                self.network.set_target()
-                for batch in train_loader:
-
-                    optimizer.zero_grad()
-
-                    loss_bx, trt_tot, trt_crc = self.observe(batch, iteration)
-
-                    loss_bx.backward()
-                    optimizer.step()
-                    # update stats
-                    train_loss += loss_bx.item()
-                    train_total += trt_tot
-                    train_correct += trt_crc
-            else:  # if I USE protos
-                for source_loader, target_loader in train_loader:
-
-                    optimizer.zero_grad()
-                    # train the target
-                    self.network.set_target()
-                    loss_bx_tar, tr_tot, tr_crc = self.observe(target_loader, iteration)
-                    train_total += tr_tot
-                    train_correct += tr_crc
-
-                    # train the source
-                    self.network.set_source()
-                    loss_bx_src, tr_tot, tr_crc = self.observe(source_loader, iteration)
-                    train_total += tr_tot
-                    train_correct += tr_crc
-
-                    loss_bx = loss_bx_src + loss_bx_tar
-                    loss_bx.backward()
-                    optimizer.step()
-
-                    train_loss += loss_bx.item()
-
-            # make validation
-            self.network.eval()
-            self.network.set_target()
-            test_loss = 0
-            test_correct = 0
-            test_total = 0
-            for inputs, targets_prep in valid_loader:
-
-                targets = np.zeros((inputs.shape[0], self.n_classes), np.float32)
-                targets[range(len(targets_prep)), targets_prep.type(torch.int32)] = 1.
-
-                inputs = inputs.to(self.device)
-
-                outputs = self.network.forward(inputs)  # make the embedding
-                outputs = self.network.predict(outputs)  # make the prediction with sigmoid, making g_y(xi)
-                targets = torch.tensor(targets).to(outputs.device)
-                targets_prep = torch.LongTensor(targets_prep).to(outputs.device)
-
-                loss_bx = self.loss(outputs, targets)  # without distillation? -> YES, validation only on new classes
-
-                test_loss += loss_bx.item()
-                _, predicted = outputs.max(1)
-                test_total += targets.size(0)
-                test_correct += predicted.eq(targets_prep).sum().item()
-
-            # normalize and print stats
-            train_acc = 100. * train_correct / train_total
-            test_acc = 100. * test_correct / test_total
+            train_loss, train_acc, test_loss, test_acc = \
+                self.observe(epoch, iteration, train_loader, valid_loader, scheduler, optimizer)
 
             self.logger.log_training(epoch, train_loss/len(train_loader), train_acc,
                                      test_loss/len(valid_loader), test_acc, iteration)
@@ -387,7 +319,78 @@ class ICarlDA(AbstractMethod):
         y_protoset = [cl for j in range(len(alph)) if alph[j] == 1]
         return x_protoset, y_protoset
 
-    def observe(self, loader, iteration):
+    def observe(self, epoch, iteration, train_loader, valid_loader, scheduler, optimizer):
+        self.network.train()
+        train_loss = 0
+        train_correct = 0
+        train_total = 0
+        scheduler.step()
+
+        if iteration == 0 or not self.protos:  # if I DON'T use protos (I don't use them in first iteration as well)
+            self.network.set_target()
+            for batch in train_loader:
+                optimizer.zero_grad()
+
+                loss_bx, trt_tot, trt_crc = self._compute_loss(batch, iteration)
+
+                loss_bx.backward()
+                optimizer.step()
+                # update stats
+                train_loss += loss_bx.item()
+                train_total += trt_tot
+                train_correct += trt_crc
+        else:  # if I USE protos
+            for source_loader, target_loader in train_loader:
+                optimizer.zero_grad()
+                # train the target
+                self.network.set_target()
+                loss_bx_tar, tr_tot, tr_crc = self._compute_loss(target_loader, iteration)
+                train_total += tr_tot
+                train_correct += tr_crc
+
+                # train the source
+                self.network.set_source()
+                loss_bx_src, tr_tot, tr_crc = self._compute_loss(source_loader, iteration)
+                train_total += tr_tot
+                train_correct += tr_crc
+
+                loss_bx = loss_bx_src + loss_bx_tar
+                loss_bx.backward()
+                optimizer.step()
+
+                train_loss += loss_bx.item()
+
+        # make validation
+        self.network.eval()
+        self.network.set_target()
+        test_loss = 0
+        test_correct = 0
+        test_total = 0
+        for inputs, targets_prep in valid_loader:
+            targets = np.zeros((inputs.shape[0], self.n_classes), np.float32)
+            targets[range(len(targets_prep)), targets_prep.type(torch.int32)] = 1.
+
+            inputs = inputs.to(self.device)
+
+            outputs = self.network.forward(inputs)  # make the embedding
+            outputs = self.network.predict(outputs)  # make the prediction with sigmoid, making g_y(xi)
+            targets = torch.tensor(targets).to(outputs.device)
+            targets_prep = torch.LongTensor(targets_prep).to(outputs.device)
+
+            loss_bx = self.loss(outputs, targets)  # without distillation? -> YES, validation only on new classes
+
+            test_loss += loss_bx.item()
+            _, predicted = outputs.max(1)
+            test_total += targets.size(0)
+            test_correct += predicted.eq(targets_prep).sum().item()
+
+        # normalize and print stats
+        train_acc = 100. * train_correct / train_total
+        test_acc = 100. * test_correct / test_total
+
+        return train_loss, train_acc, test_loss, test_acc
+
+    def _compute_loss(self, loader, iteration):
         inputs, targets_prep = loader
 
         targets = np.zeros((inputs.shape[0], self.n_classes), np.float32)

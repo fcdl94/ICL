@@ -19,7 +19,7 @@ parser = argparse.ArgumentParser(description='Incremental class learning with Do
 parser.add_argument('setting', default='gtsrb', help='Setting to run (see config.py)')
 parser.add_argument('--root', default='/home/fcdl/dataset/', help='Base directory where are stored the data')
 
-parser.add_argument('--to_run', default=1, type=int, help='Number of last run to test (each run has different order')
+parser.add_argument('--to_run', default=5, type=int, help='Number of last run to test (each run has different order')
 parser.add_argument('--from_run', default=0, type=int, help='Number of first run to test (each run has different order')
 
 # network/training variables
@@ -59,9 +59,9 @@ torch.manual_seed(args.seed)
 np.random.seed(seed=args.seed)
 
 for run in range(args.from_run, args.to_run):
-    # print(f"Logs will be saved in logs/{args.setting}/run{run}/{log}.train")
-    logging.basicConfig(level=logging.DEBUG, format="%(message)s"
-                        )  # filename=f"logs/{args.setting}/run{run}/{log}.train", filemode='a',
+    print(f"Logs will be saved in logs/{args.setting}/run{run}/{log}.train")
+    logging.basicConfig(level=logging.DEBUG, format="%(message)s",
+                        filename=f"logs/{args.setting}/run{run}/{log}.train", filemode='a')
 
     # get the data
     data = config['dataset'](args.root, **config['data_conf'], run_number=run, workers=8)
@@ -69,7 +69,7 @@ for run in range(args.from_run, args.to_run):
     network = conf.get_network(config['network-type'], args.da)(num_classes=config['n_classes'],
                                                                 pretrained=args.pretrained)
     # define the method
-    method = conf.get_method(args.method, config=args.config_file, network=network, n_classes=config['n_classes'],
+    method = conf.get_method(args.method, da_method=args.da, config=args.config_file, network=network, n_classes=config['n_classes'],
                              n_base=n_base, n_incr=n_incr, features=config['n_features'],
                              log=f"logs/{args.setting}/run{run}/{log}", name=f"{args.setting}-{run}-{log}")
     # run fit!

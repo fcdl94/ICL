@@ -13,6 +13,7 @@ import math
 import torch.utils.model_zoo as model_zoo
 from torchvision.models.resnet import Bottleneck
 from .dial import DomainAdaptationLayer as DAL
+from .rev_grad import grad_reverse as GRL
 
 from torch.nn import init
 
@@ -193,7 +194,7 @@ class CifarResNet(nn.Module):
     https://arxiv.org/abs/1512.03385.pdf
     """
 
-    def __init__(self, block=BasicBlock, depth=32, num_classes=100, channels=3, dial=False):
+    def __init__(self, block=BasicBlock, depth=32, num_classes=100, channels=3, dial=False, revgrad=False):
 
         super(CifarResNet, self).__init__()
 
@@ -207,6 +208,8 @@ class CifarResNet(nn.Module):
         else:
             bn = DAL
 
+        self.revgrad = revgrad
+
         self.num_classes = num_classes
 
         self.conv_1_3x3 = nn.Conv2d(channels, 16, kernel_size=3, stride=1, padding=1, bias=False)
@@ -218,6 +221,15 @@ class CifarResNet(nn.Module):
         self.stage_3 = self._make_layer(block, 64, layer_blocks, 2, dial, last=True)
         self.avgpool = nn.AvgPool2d(8)
         self.linear = nn.Linear(64, num_classes)
+
+        if revgrad:
+            self.domain_discriminator = nn.Sequential(nn.Linear(64, 1024),
+                                                      nn.ReLU(),
+                                                      nn.Linear(1024, 1024),
+                                                      nn.ReLU(),
+                                                      nn.Linear(1024, 1))
+        else:
+            self.domain_discriminator = None
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -279,6 +291,12 @@ class CifarResNet(nn.Module):
     def predict(self, x):
         out = self.linear(x)
         return out
+
+    def discriminate_domain(self, x):
+        assert self.domain_discriminator is not None, "Calling discriminate_domain without enabling rev_grad"
+        x = GRL(x)
+        x = self.domain_discriminator(x)
+        return x
 
 
 class WideResNet(nn.Module):
@@ -362,6 +380,11 @@ def cifar_resnet(pretrained=False, num_classes=1000):
 
 def cifar_resnet_dial(pretrained=False, num_classes=1000):
     model = CifarResNet(num_classes=num_classes, dial=True)
+    return model
+
+
+def cifar_resnet_revgrad(pretrained=False, num_classes=1000):
+    model = CifarResNet(num_classes=num_classes, revgrad=True)
     return model
 
 

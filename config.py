@@ -5,6 +5,7 @@ from methods.icarl import ICarl
 import json
 from methods.fine_tuning import FineTuning
 from methods.icarl_da import ICarlDA
+from methods.icarl_revgrad import ICarlRG
 
 
 gtsrb_train = 'GTSRB/Final_Training/Images'
@@ -241,7 +242,7 @@ def __parse_config__(config):
     return pars
 
 
-def get_method(m_name, config=None, **kwargs):
+def get_method(m_name, da_method=None, config=None, **kwargs):
 
     pars = __parse_config__(config)
 
@@ -250,14 +251,18 @@ def get_method(m_name, config=None, **kwargs):
 
     if m_name.lower() == 'icarl-single':
         return ICarl(**pars)
-    if m_name.lower() == 'icarl':
+    if m_name.lower() == 'icarl' and (da_method is None or "dial" in da_method):
         return ICarlDA(**pars)
-    if m_name.lower() == 'lwf':
+    if m_name.lower() == 'icarl' and "revgrad" in da_method:
+        return ICarlRG(**pars)
+    if m_name.lower() == 'lwf' and (da_method is None or "dial" in da_method):
         return ICarlDA(**pars, protos=False)
+    if m_name.lower() == 'lwf' and "revgrad" in da_method:
+        return ICarlRG(**pars, protos=False)
     if m_name.lower() == 'finetuning':
         return FineTuning(**pars)
 
-    assert False, f"There is no methods called {m_name}."
+    assert False, f"There is no methods called {m_name} that uses {da_method} as domain adaptation."
 
 
 def get_transform(name):
@@ -310,6 +315,8 @@ def get_network(typ, da):
             return cifar_resnet
         elif "dial" in da:
             return cifar_resnet_dial
+        elif "revgrad" in da:
+            return cifar_resnet_revgrad
 
     elif "wide" in typ:
         if da is None:
@@ -317,7 +324,7 @@ def get_network(typ, da):
         elif "dial" in da:
             return wide_resnet
         else:
-            return wide_resnet_dial
+            return NotImplementedError
     else:
         raise NotImplementedError
 
