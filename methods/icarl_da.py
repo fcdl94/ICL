@@ -28,7 +28,7 @@ class ICarlDA(AbstractMethod):
     def __init__(self, network, n_classes=100, n_base=10, n_incr=10,
                  target_mem_size=ALL, source_mem_size=MEM_SIZE, distillation=True, features=64,
                  lr_init=LR, decay=DECAY, epochs=EPOCHS, device=DEVICE,
-                 log="ICARL", name="ICARL", **trash):
+                 protos=True, log="ICARL", name="ICARL", **trash):
 
         super().__init__(network=network, n_classes=n_classes, nb_base=n_base, nb_incr=n_incr,
                          log=log, name=name,
@@ -42,8 +42,13 @@ class ICarlDA(AbstractMethod):
         self.dataset = None
 
         # method variables
-        self.mem_size_target = target_mem_size
-        self.mem_size_source = source_mem_size
+        self.protos = protos
+        if protos:
+            self.mem_size_target = target_mem_size
+            self.mem_size_source = source_mem_size
+        else:
+            self.mem_size_target = 0
+            self.mem_size_source = 0
 
         self.prototypes_target = None  # list of target PIL images
         self.prototypes_source = None  # list of source PIL images
@@ -75,13 +80,18 @@ class ICarlDA(AbstractMethod):
                                                                         iteration=iteration)
             print(f'{"Source" if iteration>0 else "Target"} batch {iteration} samples arrives ...')
             self.incremental_fit(iteration, train_loader, valid_dataloader)
-            print('Updating exemplar set...')
-            if iteration == 0:
-                self.prototypes_target = self.update_exemplars(iteration)
-            else:
-                self.prototypes_source = self.update_exemplars(iteration)
 
-            means = self.compute_means(iteration)
+            if self.protos:
+                print('Updating exemplar set ...')
+                if iteration == 0:
+                    self.prototypes_target = self.update_exemplars(iteration)
+                else:
+                    self.prototypes_source = self.update_exemplars(iteration)
+                print('Computing class means ...')
+                means = self.compute_means(iteration)
+            else:
+                means = None
+
             acc_cum = self.test(iteration, class_means=means, conf_matrix=True)
             acc_new = self.test(iteration, class_means=means, cumulative=False)
             acc_base = self.test(0, class_means=means)
@@ -92,7 +102,11 @@ class ICarlDA(AbstractMethod):
 
         acc_cum = []
         tot = self.iteration_total - 1
-        means = self.compute_means(tot)
+        if self.protos:
+            means = self.compute_means(tot)
+        else:
+            means = None
+
         for i in range(tot+1):
             acc_cum.append(self.test(i, cumulative=False, class_means=means))
 
@@ -122,7 +136,7 @@ class ICarlDA(AbstractMethod):
             train_total = 0
             scheduler.step()
 
-            if iteration == 0:
+            if iteration == 0 or not self.protos:  # if I DON'T use protos (I don't use them in first iteration as well)
                 self.network.set_target()
                 for batch in train_loader:
 
@@ -136,7 +150,7 @@ class ICarlDA(AbstractMethod):
                     train_loss += loss_bx.item()
                     train_total += trt_tot
                     train_correct += trt_crc
-            else:
+            else:  # if I USE protos
                 for source_loader, target_loader in train_loader:
 
                     optimizer.zero_grad()
@@ -196,9 +210,6 @@ class ICarlDA(AbstractMethod):
 
     def test(self, iteration, cumulative=True, class_means=None, conf_matrix=False):
 
-        if class_means is None:
-            class_means = self.compute_means(iteration)
-
         top1_acc_list = np.zeros(4)
 
         stat_hb1 = []
@@ -209,7 +220,7 @@ class ICarlDA(AbstractMethod):
         data_loader = self.dataset.test_dataloader(iteration, cumulative=cumulative)
 
         target_total = []
-        target_icarl = []
+        target_pred = []
 
         self.network.set_target()
         self.network.eval()
@@ -226,63 +237,39 @@ class ICarlDA(AbstractMethod):
             # Compute the accuracy over the batch
             targets_prep = targets_prep.numpy()
 
-            # Compute score for iCaRL
-            sqd = cdist(class_means[:, :, 0].T, outputs, 'sqeuclidean')  # Squared euclidean distance
-            score_icarl = (-sqd).T
-            # Compute score for iCaRL-Inverted
-            sqd = cdist(class_means[:, :, 2].T, outputs, 'sqeuclidean')  # Squared euclidean distance
-            score_icarl_inv = (-sqd).T
-            # Compute score for NCM
-            sqd = cdist(class_means[:, :, 1].T, outputs, 'sqeuclidean')  # Squared euclidean distance
-            score_ncm = (-sqd).T
+            if class_means is not None:  # if we are using the means compute and use ICaRL
+                # Compute score for iCaRL
+                sqd = cdist(class_means[:, :, 0].T, outputs, 'sqeuclidean')  # Squared euclidean distance
+                score_icarl = (-sqd).T
+                # Compute score for iCaRL-Inverted
+                sqd = cdist(class_means[:, :, 2].T, outputs, 'sqeuclidean')  # Squared euclidean distance
+                score_icarl_inv = (-sqd).T
+                # Compute score for NCM
+                sqd = cdist(class_means[:, :, 1].T, outputs, 'sqeuclidean')  # Squared euclidean distance
+                score_ncm = (-sqd).T
 
-            stat_icarl += ([ll in best for ll, best in zip(targets_prep, np.argsort(score_icarl, axis=1)[:, -1:])])
-            stat_icarl_i += ([ll in best for ll, best in zip(targets_prep, np.argsort(score_icarl_inv, axis=1)[:, -1:])])
-            stat_ncm += ([ll in best for ll, best in zip(targets_prep, np.argsort(score_ncm, axis=1)[:, -1:])])
+                stat_icarl += ([ll in best for ll, best in zip(targets_prep, np.argsort(score_icarl, axis=1)[:, -1:])])
+                stat_icarl_i += ([ll in best for ll, best in zip(targets_prep, np.argsort(score_icarl_inv, axis=1)[:, -1:])])
+                stat_ncm += ([ll in best for ll, best in zip(targets_prep, np.argsort(score_ncm, axis=1)[:, -1:])])
+                target_pred += [i.item() for i in np.argsort(score_icarl, axis=1)[:, -1:]]
+            else:  # otherwise use H1 (special case to handle LwF)
+                target_pred += [i.item() for i in np.argsort(pred, axis=1)[:, -1:]]
+
             stat_hb1 += ([ll in best for ll, best in zip(targets_prep, np.argsort(pred, axis=1)[:, -1:])])
 
-            target_icarl += [i.item() for i in np.argsort(score_icarl, axis=1)[:, -1:]]
             target_total += [i.item() for i in targets_prep]
 
         # use the logits
-        top1_acc_list[0] = np.average(stat_icarl) * 100.  # ICarl
-        top1_acc_list[1] = np.average(stat_hb1) * 100.  # Hybrid 1
-        top1_acc_list[2] = np.average(stat_ncm) * 100.  # NCM
-        top1_acc_list[3] = np.average(stat_icarl_i) * 100.  # ICaRL inv
+        top1_acc_list[0] = np.average(stat_icarl) * 100. if class_means else 0.     # ICarl
+        top1_acc_list[1] = np.average(stat_hb1) * 100.                              # Hybrid 1
+        top1_acc_list[2] = np.average(stat_ncm) * 100. if class_means else 0.       # NCM
+        top1_acc_list[3] = np.average(stat_icarl_i) * 100. if class_means else 0.   # ICaRL inv
         # print confusion matrix
         if conf_matrix:
             self.logger.confusion_matrix(self.reorder_target(target_total),
-                                         self.reorder_target(target_icarl),
+                                         self.reorder_target(target_pred),
                                          self.n_classes)
         return top1_acc_list
-
-    def predict(self, inputs, method=0):
-        """
-        :return the predicted class for the inputs as tensor in cpu
-
-        :param inputs: tensors to be evaluated
-        :param method: 0 (def) is ICaRL, 1 is NCM, 2 is ICaRL-inv, 3 is with sigmoid (Hybrid 1)
-        """
-        self.network.set_target()
-        self.network.eval()
-
-        if self.iteration_total > 0 and 0 <= method <= 3:
-            class_means = self.compute_means(self.iteration_total - 1)
-            outputs = self.network.forward(inputs)  # returns embeddings
-
-            if method == 3:
-                pred = self.network.predict(outputs).cpu().detach()
-            elif 0 <= method < 3:
-                outputs = outputs.cpu().detach().numpy()
-                outputs = (outputs.T / np.linalg.norm(outputs.T, axis=0)).T  # normalize output
-                sqd = cdist(class_means[:, :, method].T, outputs, 'sqeuclidean')  # Squared euclidean distance
-                score = (-sqd).T
-                pred = np.argsort(score, axis=1)[:, -1:]
-                pred = torch.tensor(pred)
-
-            return pred
-        else:
-            raise Exception("Pass method between 0 and 3 inclusive")
 
     def update_exemplars(self, iteration):
         if iteration == 0:  # target case

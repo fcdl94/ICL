@@ -73,10 +73,6 @@ class AbstractMethod(ABC):
         pass
 
     @abstractmethod
-    def predict(self, inputs):
-        pass
-
-    @abstractmethod
     def test(self, iteration, cumulative=True,):
         pass
 
