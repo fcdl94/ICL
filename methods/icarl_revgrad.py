@@ -46,15 +46,16 @@ class ICarlRG(ICarlDA):
                 self.lam = 2. / (1. + np.exp(-10 * p)) - 1
 
                 optimizer.zero_grad()
-                # train the target
-                self.network.set_target()
-                loss_bx_tar, tr_tot, tr_crc = self._compute_loss(target_loader, iteration)
-                train_total += tr_tot
-                train_correct += tr_crc
 
                 # train the source
                 self.network.set_source()
                 loss_bx_src, tr_tot, tr_crc = self._compute_loss(source_loader, iteration, target=False)
+                train_total += tr_tot
+                train_correct += tr_crc
+
+                # train the target
+                self.network.set_target()
+                loss_bx_tar, tr_tot, tr_crc = self._compute_loss(target_loader, iteration)
                 train_total += tr_tot
                 train_correct += tr_crc
 

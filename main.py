@@ -23,7 +23,7 @@ parser.add_argument('--to_run', default=5, type=int, help='Number of last run to
 parser.add_argument('--from_run', default=0, type=int, help='Number of first run to test (each run has different order')
 
 # network/training variables
-parser.add_argument('--pretrained', default=False, type=bool, help='If start with ImageNet pretraining or not')
+parser.add_argument('--pretrained', default=None, type=str, help='If start with ImageNet pretraining or not')
 parser.add_argument('--epochs', default=None, type=int, help='The number of epochs to use')
 
 # method variables
@@ -60,7 +60,7 @@ np.random.seed(seed=args.seed)
 
 for run in range(args.from_run, args.to_run):
     print(f"Logs will be saved in logs/{args.setting}/run{run}/{log}.train")
-    logging.basicConfig(level=logging.DEBUG, format="%(message)s",
+    logging.basicConfig(level=logging.INFO, format="%(message)s",
                         filename=f"logs/{args.setting}/run{run}/{log}.train", filemode='a')
 
     # get the data

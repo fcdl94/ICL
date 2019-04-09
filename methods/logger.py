@@ -1,6 +1,20 @@
 import visdom
 import numpy as np
 import logging
+from tensorboardX import SummaryWriter
+
+
+class TensorboardXLogger:
+    def __init__(self, path, name):
+        import torch
+        writer = SummaryWriter()
+        for n_iter in range(100):
+            writer.add_scalars('data/scalar_group', {"scalar1": n_iter * np.sin(n_iter),
+                                                     "scalar2": n_iter * np.cos(n_iter),
+                                                     "arctanx": np.arctan(n_iter)}, n_iter)
+            writer.add_histogram("pippo", torch.randn(2, 1), n_iter)
+        writer.close()
+
 
 class VisdomLogger:
     def __init__(self, path, name):
@@ -19,7 +33,7 @@ class VisdomLogger:
         self.valid_acc = []
 
     def log_training(self, epoch, train_loss, train_acc, valid_loss, valid_acc, iteration=0):
-        logging.debug(f"Epoch {epoch + 1:3d} : Train Loss {train_loss:.6f}, Train Acc {train_acc:.2f}\n"
+        logging.info(f"Epoch {epoch + 1:3d} : Train Loss {train_loss:.6f}, Train Acc {train_acc:.2f}\n"
                      f"          : Valid Loss {valid_loss:.6f}, Valid Acc {valid_acc:.2f}")
 
         if self.iteration != iteration:

@@ -79,6 +79,10 @@ class ICarlDA(AbstractMethod):
                 train_loader, valid_dataloader = dataset.next_iteration(target_proto=self.prototypes_target,
                                                                         source_proto=self.prototypes_source,
                                                                         iteration=iteration)
+                if self.protos:
+                    print(f"Source (samples) len {len(train_loader.dataset.dataset1)}")
+                    print(f"Target (protos)  len {len(train_loader.dataset.dataset2)}")
+
             logging.info(f'{"Source" if iteration>0 else "Target"} batch {iteration} samples arrives ...')
             self.incremental_fit(iteration, train_loader, valid_dataloader)
 
@@ -342,11 +346,6 @@ class ICarlDA(AbstractMethod):
         else:  # if I USE protos
             for source_loader, target_loader in train_loader:
                 optimizer.zero_grad()
-                # train the target
-                self.network.set_target()
-                loss_bx_tar, tr_tot, tr_crc = self._compute_loss(target_loader, iteration)
-                train_total += tr_tot
-                train_correct += tr_crc
 
                 # train the source
                 self.network.set_source()
@@ -354,7 +353,13 @@ class ICarlDA(AbstractMethod):
                 train_total += tr_tot
                 train_correct += tr_crc
 
-                loss_bx = loss_bx_src + loss_bx_tar
+                # train the target
+                self.network.set_target()
+                loss_bx_tar, tr_tot, tr_crc = self._compute_loss(target_loader, iteration)
+                train_total += tr_tot
+                train_correct += tr_crc
+
+                loss_bx = loss_bx_src  # todo + loss_bx_tar
                 loss_bx.backward()
                 optimizer.step()
 

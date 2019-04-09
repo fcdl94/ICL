@@ -300,7 +300,7 @@ class CifarResNet(nn.Module):
 
 
 class WideResNet(nn.Module):
-    def __init__(self, resnet_block, widening_factor=4, num_classes=1000, dial=False):
+    def __init__(self, resnet_block, widening_factor=4, num_classes=1000, dial=False, revgrad=False):
         super(WideResNet, self).__init__()
 
         self.dial = dial
@@ -324,6 +324,17 @@ class WideResNet(nn.Module):
 
         self.fc = nn.Linear(256, num_classes)
         self.index = 0
+
+        self.revgrad = revgrad
+
+        if revgrad:
+            self.domain_discriminator = nn.Sequential(nn.Linear(64, 1024),
+                                                      nn.ReLU(),
+                                                      nn.Linear(1024, 1024),
+                                                      nn.ReLU(),
+                                                      nn.Linear(1024, 1))
+        else:
+            self.domain_discriminator = None
 
     def _make_layer(self, block, planes, blocks, dial=False, stride=1, last=False):
         downsample = None
@@ -372,29 +383,70 @@ class WideResNet(nn.Module):
     def predict(self, x):
         return self.fc(x)
 
+    def discriminate_domain(self, x):
+        assert self.domain_discriminator is not None, "Calling discriminate_domain without enabling rev_grad"
+        x = GRL(x)
+        x = self.domain_discriminator(x)
+        return x
 
-def cifar_resnet(pretrained=False, num_classes=1000):
+
+def cifar_resnet(pretrained=None, num_classes=1000):
     model = CifarResNet(num_classes=num_classes)
+    if pretrained is not None:
+        state_dict = torch.load(pretrained)
+        model.load_state_dict(state_dict['network'])
+        print(f"Model pretrained loaded {pretrained}")
+
     return model
 
 
-def cifar_resnet_dial(pretrained=False, num_classes=1000):
+def cifar_resnet_dial(pretrained=None, num_classes=1000):
     model = CifarResNet(num_classes=num_classes, dial=True)
+    if pretrained is not None:
+        state_dict = torch.load(pretrained)
+        model.load_state_dict(state_dict['network'])
+        print(f"Model pretrained loaded {pretrained}")
+
     return model
 
 
-def cifar_resnet_revgrad(pretrained=False, num_classes=1000):
+def cifar_resnet_revgrad(pretrained=None, num_classes=1000):
     model = CifarResNet(num_classes=num_classes, revgrad=True)
+    if pretrained is not None:
+        state_dict = torch.load(pretrained)
+        model.load_state_dict(state_dict['network'])
+        print(f"Model pretrained loaded {pretrained}")
+
     return model
 
 
-def wide_resnet(pretrained=False, num_classes=1000):
+def wide_resnet(pretrained=None, num_classes=1000):
     model = WideResNet(BasicBlock, num_classes=num_classes)
+    if pretrained is not None:
+        state_dict = torch.load(pretrained)
+        model.load_state_dict(state_dict['network'])
+        print(f"Model pretrained loaded {pretrained}")
+
     return model
 
 
-def wide_resnet_dial(pretrained=False, num_classes=1000):
+def wide_resnet_dial(pretrained=None, num_classes=1000):
     model = WideResNet(BasicBlock, num_classes=num_classes, dial=True)
+    if pretrained is not None:
+        state_dict = torch.load(pretrained)
+        model.load_state_dict(state_dict['network'])
+        print(f"Model pretrained loaded {pretrained}")
+
+    return model
+
+
+def wide_resnet_revgrad(pretrained=None, num_classes=1000):
+    model = WideResNet(BasicBlock, num_classes=num_classes, revgrad=True)
+    if pretrained is not None:
+        state_dict = torch.load(pretrained)
+        model.load_state_dict(state_dict['network'])
+        print(f"Model pretrained loaded {pretrained}")
+
     return model
 
 
