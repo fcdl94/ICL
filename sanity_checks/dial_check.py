@@ -7,15 +7,15 @@ from torchvision import transforms
 from torch.utils.data import DataLoader
 from data.idadataloader import DoubleDataset
 import torch.nn.functional as F
-import numpy as np
+from data.common import split_dataset, Subset
 
 root = '/home/fcdl/dataset/'
-target_path = root + "GTSRB/Final_Training"
+target_path = root + "GTSRB/Final_Training/Images"
 source_path = root + "synthetic_data"
 test_path = root + "GTSRB/Final_Test"
 
 EPOCHS = 70
-NUM_CLASSES = 43
+NUM_CLASSES = 100
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 
@@ -51,8 +51,7 @@ def update_stats(network, train_loader, scheduler=None, optimizer=None):
 
 
 def train_epoch_single(network, train_loader, scheduler, optimizer):
-    # src_criterion = nn.CrossEntropyLoss()
-    src_criterion = nn.BCEWithLogitsLoss(reduction='mean')
+    src_criterion = nn.CrossEntropyLoss()
 
     network.train()
     train_loss = 0
@@ -61,27 +60,22 @@ def train_epoch_single(network, train_loader, scheduler, optimizer):
     batch_idx = 0
     scheduler.step()
 
+    # train the source
+    network.set_source()
+
     for batch in train_loader:
 
         optimizer.zero_grad()
 
-        # train the source
-        network.set_source()
-
         inputs, targets = batch
 
         inputs = inputs.to(device)
-
-        targets_bce = np.zeros((inputs.shape[0], NUM_CLASSES), np.float32)
-        targets_bce[range(len(targets)), targets.type(torch.int32)] = 1.
-
         targets = targets.to(device)
-        targets_bce = torch.tensor(targets_bce).to(device)
 
         outputs = network.forward(inputs)  # feature vector only
         prediction = network.predict(outputs)  # make the prediction with sigmoid, making g_y(xi)
 
-        loss_bx = src_criterion(prediction, targets_bce)  # CE loss
+        loss_bx = src_criterion(prediction, targets)  # CE loss
 
         loss_bx.backward()
         optimizer.step()
@@ -107,7 +101,7 @@ def train_epoch_single(network, train_loader, scheduler, optimizer):
 
 
 def train_epoch(network, train_loader, scheduler, optimizer):
-    tar_criterion = nn.CrossEntropyLoss()
+    tar_criterion = EntropyLoss()
     src_criterion = nn.CrossEntropyLoss()
 
     network.train()
@@ -158,7 +152,7 @@ def train_epoch(network, train_loader, scheduler, optimizer):
         outputs = network.forward(inputs)  # feature vector only
         prediction = network.predict(outputs)  # make the prediction with sigmoid, making g_y(xi)
 
-        loss_bx_tar = tar_criterion(prediction, targets)  # C-Entropy LOSS
+        loss_bx_tar = tar_criterion(prediction)  # Entropy LOSS
 
         # stats on target
         _, predicted = prediction.max(1)
@@ -244,36 +238,39 @@ if __name__ == '__main__':
 
     train = DoubleDataset(source, target)
 
-    train_loader = DataLoader(train, 64, True, num_workers=8)
+    train_loader = DataLoader(train, 128, True, num_workers=8)
     source_loader = DataLoader(source, 128, True, num_workers=8)
     target_loader = DataLoader(target, 128, True, num_workers=8)
 
     test_loader = DataLoader(test, 512, False, num_workers=8)
 
+    print(f"Train  loader {len(target_loader)}")
+    print(f"Source loader {len(source_loader)}")
+    print(f"Test   loader {len(test_loader)}")
+
     # get network
-    #net = net.cifar_resnet_dial(None, NUM_CLASSES).to(device)
-    net = net.cifar_resnet(None, NUM_CLASSES).to(device)
+    net = net.cifar_resnet_dial(None, NUM_CLASSES).to(device)
+    # net = net.cifar_resnet(None, NUM_CLASSES).to(device)
 
     optimizer = optim.SGD(filter(lambda p: p.requires_grad, net.parameters()),
-                          lr=2., weight_decay=1e-5, momentum=0.9, nesterov=False)
+                          lr=0.1, weight_decay=1e-5, momentum=0.9, nesterov=False)
     scheduler = optim.lr_scheduler.MultiStepLR(optimizer, [int(0.7*EPOCHS), int(0.9*EPOCHS)], gamma=0.2)
 
     print("STARTING ....")
     # define training steps
-    for epoch in range(20):
-        train_loss, train_acc = train_epoch_single(net, train_loader=target_loader, optimizer=optimizer, scheduler=scheduler)
+    for epoch in range(0):
+        train_loss, train_acc = train_epoch_single(net, train_loader=source_loader, optimizer=optimizer, scheduler=scheduler)
         val_loss, val_acc = valid(net, valid_loader=test_loader, target=False)
         print(f"Epoch {epoch+1:03d}: Train Loss {train_loss:.6f}, Train Acc {train_acc:.2f}\n"
               f"         : Valid Loss {val_loss:.6f}, Valid Acc {val_acc:.2f}")
 
-    for epoch in range(0):
+    for epoch in range(40):
         # train epoch
         train_loss, train_acc = train_epoch(net, train_loader=train_loader, optimizer=optimizer, scheduler=scheduler)
         # train_loss, train_acc = train_epoch_single(net, train_loader=source_loader, optimizer=optimizer, scheduler=scheduler)
         # train_loss, train_acc = update_stats(net, train_loader=target_loader, optimizer=None, scheduler=None)
         # train_loss, train_acc = 0., 0.
         # valid!
-        #val_loss, val_acc = valid(net, valid_loader=test_loader, target=False)
         val_loss, val_acc = valid(net, valid_loader=test_loader)
 
         print(f"Epoch {epoch+1:03d}: Train Loss {train_loss:.6f}, Train Acc {train_acc:.2f}\n"
@@ -282,6 +279,6 @@ if __name__ == '__main__':
     print("SAVING...")
     torch.save({
         "network": net.state_dict()
-    }, "models/cifar_resnet_TO.pth")
+    }, "models/cifar_resnet_wEntropy.pth")
 
     print(".... END")

@@ -10,7 +10,7 @@ from data.idadataloader import DoubleDataset
 import torch.nn.functional as F
 
 root = '/home/fcdl/dataset/'
-target_path = root + "GTSRB/Final_Training"
+target_path = root + "GTSRB/Final_Training/Images"
 source_path = root + "synthetic_data"
 test_path = root + "GTSRB/Final_Test"
 
@@ -71,8 +71,8 @@ def train_epoch(network, train_loader, scheduler, optimizer):
 
         # sum the losses and do backward propagation
         loss_dom = (loss_bx_dom_s + loss_bx_dom_t)
-        #loss_bx = loss_bx_src + loss_bx_tar + const * lam * loss_dom
-        loss_bx = loss_bx_src + const * lam * loss_dom
+        loss_bx = loss_bx_src + loss_bx_tar + const * lam * loss_dom  # using target labels
+        # loss_bx = loss_bx_src + const * lam * loss_dom              # don't use target labels
 
         loss_bx.backward()
         optimizer.step()
