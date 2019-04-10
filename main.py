@@ -19,7 +19,7 @@ parser = argparse.ArgumentParser(description='Incremental class learning with Do
 parser.add_argument('setting', default='gtsrb', help='Setting to run (see config.py)')
 parser.add_argument('--root', default='/home/fcdl/dataset/', help='Base directory where are stored the data')
 
-parser.add_argument('--to_run', default=5, type=int, help='Number of last run to test (each run has different order')
+parser.add_argument('--to_run', default=2, type=int, help='Number of last run to test (each run has different order')
 parser.add_argument('--from_run', default=0, type=int, help='Number of first run to test (each run has different order')
 
 # network/training variables

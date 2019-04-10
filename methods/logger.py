@@ -103,4 +103,5 @@ class VisdomLogger:
         self.vis.env = self.name + "_TR"
 
         np.savetxt(self.path + f"/{self.name}CF{self.iteration}.csv", conf, delimiter=",")
+        logging.info(f"Per class accuracy: { np.diag(cm).mean() * 100.}")
         return conf

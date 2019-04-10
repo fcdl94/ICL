@@ -14,7 +14,7 @@ target_path = root + "GTSRB/Final_Training/Images"
 source_path = root + "synthetic_data"
 test_path = root + "GTSRB/Final_Test"
 
-EPOCHS = 70
+EPOCHS = 40
 NUM_CLASSES = 43
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 const = 1
@@ -107,26 +107,31 @@ def valid(network, valid_loader):
     test_loss = 0
     test_correct = 0
     test_total = 0
+    domain_acc = 0
     for inputs, targets in valid_loader:
 
         inputs = inputs.to(device)
         targets = targets.to(device)
 
         outputs = network.forward(inputs)  # make the embedding
-        outputs = network.predict(outputs)  # make the prediction with sigmoid, making g_y(xi)
+        predictions = network.predict(outputs)  # make the prediction with sigmoid, making g_y(xi)
+        domains = network.discriminate_domain(outputs)
 
-        loss_bx = criterion(outputs, targets)  # without distillation? -> YES, validation only on new classes
+        loss_bx = criterion(predictions, targets)  # without distillation? -> YES, validation only on new classes
 
         test_loss += loss_bx.item()
-        _, predicted = outputs.max(1)
+        _, predicted = predictions.max(1)
         test_total += targets.size(0)
         test_correct += predicted.eq(targets).sum().item()
 
+        domain_acc += domains.sum()
+
     # normalize and print stats
     test_acc = 100. * test_correct / test_total
+    domain_acc = 100. * domain_acc / test_total
     test_loss /= len(valid_loader)
 
-    return test_loss, test_acc
+    return test_loss, test_acc, domain_acc
 
 
 if __name__ == '__main__':
@@ -168,14 +173,14 @@ if __name__ == '__main__':
         # train epoch
         train_loss, train_acc = train_epoch(net, train_loader=train_loader, optimizer=optimizer, scheduler=scheduler)
         # valid!
-        val_loss, val_acc = valid(net, valid_loader=test_loader)
+        val_loss, val_acc, dom_acc = valid(net, valid_loader=test_loader)
 
         print(f"Epoch {epoch+1:03d}: Train Loss {train_loss:.6f}, Train Acc {train_acc:.2f}\n"
-              f"         : Valid Loss {val_loss:.6f}, Valid Acc {val_acc:.2f}")
+              f"         : Valid Loss {val_loss:.6f}, Valid Acc {val_acc:.2f}, Domain Acc {dom_acc:.2f}")
 
-    torch.save({
-        "network": net
-    }, "models/cifar_resnet_rev_grad_ce_target.pth")
+    #torch.save({
+    #    "network": net
+    #}, "models/cifar_resnet_rev_grad_ce_target.pth")
 
     print(".... END")
 

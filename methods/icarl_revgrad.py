@@ -68,7 +68,10 @@ class ICarlRG(ICarlDA):
 
         # make validation
         self.network.eval()
-        self.network.set_target()
+        if iteration == 0:
+            self.network.set_target()
+        else:
+            self.network.set_source()
         test_loss = 0
         test_correct = 0
         test_total = 0
