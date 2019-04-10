@@ -100,9 +100,12 @@ class ICarlDA(AbstractMethod):
 
             acc_cum = self.test(iteration, class_means=means, conf_matrix=True)
             acc_new = self.test(iteration, class_means=means, cumulative=False)
+            acc_new_src = self.test(iteration, class_means=means, cumulative=False, target=False)
             acc_base = self.test(0, class_means=means)
 
             print_accuracy(METHODS, acc_base, acc_new, acc_cum)
+            logging.info("Use Source Statistics for new batch!")
+            print_accuracy(METHODS, acc_base, acc_new_src, acc_cum)
 
             cumulative_accuracies.append(acc_cum)
 
@@ -151,6 +154,7 @@ class ICarlDA(AbstractMethod):
 
         # Duplicate current network to distillate info
         self.network2 = copy.deepcopy(self.network)
+        # todo change here to train and test it
         self.network2.eval()
 
     # CORE OF TRAINING FUNCTIONS -> OBSERVE WILL TRAIN ONE EPOCH AND PERFORM VALIDATION
@@ -270,7 +274,7 @@ class ICarlDA(AbstractMethod):
         return loss_bx, train_total, train_correct
 
     # TEST
-    def test(self, iteration, cumulative=True, class_means=None, conf_matrix=False):
+    def test(self, iteration, cumulative=True, class_means=None, conf_matrix=False, target=True):
 
         top1_acc_list = np.zeros(4)
 
@@ -284,7 +288,11 @@ class ICarlDA(AbstractMethod):
         target_total = []
         target_pred = []
 
-        self.network.set_target()
+        if target:
+            self.network.set_target()
+        else:
+            self.network.set_source()
+
         self.network.eval()
         for inputs, targets_prep in data_loader:
             inputs = inputs.to(self.device)
