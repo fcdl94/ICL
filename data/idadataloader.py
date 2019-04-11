@@ -266,3 +266,12 @@ class SingleDataloader(IDADataloader):
         test = ImageFolder(os.path.join(root, test), transform)
 
         return target, source, test
+
+
+class MNIST_to_SVHN_Dataloader(IDADataloader):
+    def make_datasets(self, root, target, source, test, transform):
+        target = torchvision.datasets.MNIST(root, train=True, transform=torchvision.transforms.Grayscale(3))
+        source = torchvision.datasets.SVHN(root)
+        source.targets = source.labels
+        test = torchvision.datasets.MNIST(root, train=False, transform=torchvision.transforms.Grayscale(3))
+        return target, source, test
