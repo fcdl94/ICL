@@ -28,10 +28,12 @@ def train_epoch(network, train_loader, scheduler, optimizer):
     train_loss = 0
     train_correct = 0
     train_total = 0
+    train_total_src = 0
+    train_correct_src = 0
     batch_idx = 0
     scheduler.step()
 
-    for source_loader, target_loader in train_loader:
+    for source_batch, target_batch in train_loader:
 
         p = float(batch_idx + start_steps) / total_steps
         lam = 2. / (1. + np.exp(-10 * p)) - 1
@@ -41,45 +43,53 @@ def train_epoch(network, train_loader, scheduler, optimizer):
         # train the source
         network.set_source()
 
-        inputs, targets = source_loader
+        inputs, targets = source_batch
 
         inputs = inputs.to(device)
-        targets = targets.to(device)
-        domains = torch.zeros(inputs.shape[0], 1).to(device)
+        targets = targets.to(device)  # ground truth class scores
+        domains = torch.zeros(inputs.shape[0], 1).to(device)  # source is index 0
 
         outputs = network.forward(inputs)  # feature vector only
-        prediction = network.predict(outputs)  # make the prediction with sigmoid, making g_y(xi)
-        d_prediction = network.discriminate_domain(outputs)
+        prediction = network.predict(outputs)  # class scores
+        s_prediction = network.discriminate_domain(outputs)  # domain scores
 
         loss_bx_src = src_criterion(prediction, targets)  # CE loss
-        loss_bx_dom_s = dom_criterion(d_prediction, domains)
+        loss_bx_dom_s = dom_criterion(s_prediction, domains)
+
+        _, predicted = prediction.max(1)
+        tr_tot = targets.size(0)  # only on target
+        tr_crc = predicted.eq(targets).sum().item()  # only on target
+
+        train_total_src += tr_tot
+        train_correct_src += tr_crc
 
         # train the target
         network.set_target()
 
-        inputs, targets = target_loader
+        inputs, targets = target_batch
 
-        inputs, targets = inputs.to(device), targets.to(device)
-        domains = torch.ones(inputs.shape[0], 1).to(device)
+        inputs, targets = inputs.to(device), targets.to(device) # class gt
+        domains = torch.ones(inputs.shape[0], 1).to(device)  # target is index 1
 
         outputs = network.forward(inputs)  # feature vector only
-        prediction = network.predict(outputs)
-        d_prediction = network.discriminate_domain(outputs)  # make the prediction with sigmoid, making g_y(xi)
+        prediction = network.predict(outputs)  # class scores
+        d_prediction = network.discriminate_domain(outputs)  # domain score
+        #print(d_prediction)
 
         loss_bx_tar = src_criterion(prediction, targets)
         loss_bx_dom_t = dom_criterion(d_prediction, domains)
 
         # sum the losses and do backward propagation
         loss_dom = (loss_bx_dom_s + loss_bx_dom_t)
-        loss_bx = loss_bx_src + loss_bx_tar + const * lam * loss_dom  # using target labels
-        # loss_bx = loss_bx_src + const * lam * loss_dom              # don't use target labels
+        #loss_bx = loss_bx_src + loss_bx_tar + const * lam * loss_dom  # using target labels
+        loss_bx = loss_bx_src + const * lam * loss_dom              # don't use target labels
 
         loss_bx.backward()
         optimizer.step()
 
         _, predicted = prediction.max(1)
-        tr_tot = targets.size(0)
-        tr_crc = predicted.eq(targets).sum().item()
+        tr_tot = targets.size(0)  # only on target
+        tr_crc = predicted.eq(targets).sum().item()  # only on target
 
         # compute statistics
         train_loss += loss_bx.item()
@@ -88,11 +98,16 @@ def train_epoch(network, train_loader, scheduler, optimizer):
 
         batch_idx += 1
         if batch_idx % 200 == 0:
-            print(f"Lambda {lam:.4f} "
-                  f"Domain Loss: {loss_dom:.6f} "
+            print(f"Batch {batch_idx} / {len(train_loader)}\n\t"
+                  f"Lambda {lam:.4f} "
+                  f"Domain Loss: {loss_dom:.6f}\n\t" 
                   f"Source Loss: {loss_bx_src:.6f} "
-                  f"Target Loss: {loss_bx_tar:.6f}"
-                  f"Target Acc : {100.0 * train_correct / train_total:.2f}")
+                  f"Source Acc : {100.0 * train_correct_src / train_total_src:.2f} "
+                  f"SrcDom Acc : {1 - torch.sigmoid(s_prediction.detach()).mean().cpu().item():.3f}\n\t"
+                  f"Target Loss: {loss_bx_tar:.6f} "
+                  f"Target Acc : {100.0 * train_correct / train_total:.2f} "
+                  f"TarDom Acc : {torch.sigmoid(d_prediction.detach()).cpu().mean().item():.3f}"
+                  )
 
     train_acc = 100. * train_correct / train_total
 
@@ -113,18 +128,18 @@ def valid(network, valid_loader):
         inputs = inputs.to(device)
         targets = targets.to(device)
 
-        outputs = network.forward(inputs)  # make the embedding
-        predictions = network.predict(outputs)  # make the prediction with sigmoid, making g_y(xi)
-        domains = network.discriminate_domain(outputs)
+        outputs = network.forward(inputs)
+        predictions = network.predict(outputs)  # class score
+        domains = network.discriminate_domain(outputs)  # domain score (correct if 1., 0.5 is wanted)
 
-        loss_bx = criterion(predictions, targets)  # without distillation? -> YES, validation only on new classes
+        loss_bx = criterion(predictions, targets)
 
         test_loss += loss_bx.item()
         _, predicted = predictions.max(1)
         test_total += targets.size(0)
         test_correct += predicted.eq(targets).sum().item()
 
-        domain_acc += domains.sum()
+        domain_acc += torch.sigmoid(domains.cpu().detach()).sum().item()
 
     # normalize and print stats
     test_acc = 100. * test_correct / test_total
@@ -175,8 +190,7 @@ if __name__ == '__main__':
         # valid!
         val_loss, val_acc, dom_acc = valid(net, valid_loader=test_loader)
 
-        print(f"Epoch {epoch+1:03d}: Train Loss {train_loss:.6f}, Train Acc {train_acc:.2f}\n"
-              f"         : Valid Loss {val_loss:.6f}, Valid Acc {val_acc:.2f}, Domain Acc {dom_acc:.2f}")
+        print(f"\nEpoch {epoch+1:03d} : Test Loss {val_loss:.6f}, Test Acc {val_acc:.2f}, Domain Acc {dom_acc:.2f}\n")
 
     #torch.save({
     #    "network": net
