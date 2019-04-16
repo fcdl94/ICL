@@ -54,6 +54,8 @@ class ICarl(AbstractMethod):
         self.alpha_dr_herding = [np.array([0]) for i in range(n_classes)]
         self.features = features
 
+        self.protoset = None
+
         # training parameters
         self.device = device
         self.lr_init = lr_init
@@ -61,6 +63,7 @@ class ICarl(AbstractMethod):
         self.epochs = epochs
         self.lr_factor = 1. / LR_FACTOR
 
+    # STARTS THE TRAINING OF THE WHOLE METHOD, ON EVERY BATCH CLASS
     def fit(self, dataset, checkpoint=None, epochs=None):
 
         self.alpha_dr_herding = [np.array([0]) for i in range(self.n_classes)]
@@ -69,29 +72,18 @@ class ICarl(AbstractMethod):
         if epochs is not None:
             self.epochs = epochs
 
-        x_protoset = None
-        y_protoset = None
-
         cumulative_accuracies = []
 
         start_iter = 0
-
-        if checkpoint is not None:
-            check_dict = torch.load(checkpoint)
-            start_iter = check_dict['iteration']
-            self.network.load_state_dict(check_dict['network'])
-            self.network2.load_state_dict(check_dict['network2'])
-            x_protoset = check_dict['X']
-            y_protoset = check_dict['Y']
 
         for iteration in range(start_iter, self.iteration_total):
 
             if self.nb_classes(iteration) > 0:  # handle the case of full DA, then 0 base class
                 # Prepare the training data for the current batch of classes
-                train_loader, valid_dataloader = dataset.next_iteration(x_protoset, y_protoset, iteration=iteration)
+                train_loader, valid_dataloader = dataset.next_iteration(source_proto=self.protoset, iteration=iteration)
 
                 # TRAIN THIS ITERATION #
-                print('Batch of classes number {0} arrives ...'.format(iteration + 1))
+                logging.info(f'Batch of classes number {iteration+1} arrives ...')
 
                 # train for N epochs (after each epoch validate)
                 self.incremental_fit(iteration, train_loader, valid_dataloader)
@@ -99,20 +91,12 @@ class ICarl(AbstractMethod):
                 # END OF TRAINING FOR THIS ITERATION #
 
                 # UPDATE EXEMPLARS #
-                print('Updating exemplar set...')
-                x_protoset, y_protoset = self.update_exemplars(iteration)
-
-                # Save training checkpoint
-                # torch.save({
-                #    'iteration': iteration,
-                #    'network': self.network.state_dict(),
-                #    'network2': self.network2.state_dict(),
-                #    'X': x_protoset,
-                #    'Y': y_protoset
-                # }, "checkpoint/iter_" + str(iteration) + "_checkpoint.pth.tar")
+                logging.info('Updating exemplar set...')
+                self.protoset = self.update_exemplars(iteration)
+                logging.info('Computing class means ...')
+                means = self.compute_means(iteration)
 
                 # COMPUTE ACCURACY ##
-                means = self.compute_means(iteration)
                 acc_cum = self.test(iteration, class_means=means, conf_matrix=True)
                 acc_new = self.test(iteration, class_means=means, cumulative=False)
                 acc_base = self.test(0, class_means=means)
@@ -143,18 +127,7 @@ class ICarl(AbstractMethod):
 
         return cumulative_accuracies
 
-    def compute_num_classes(self, iteration):
-        if iteration < 0:
-            return 0
-        return self.nb_base + self.nb_incr * iteration
-
-    def nb_classes(self, iteration):
-        if iteration > 0:
-            nb_cl = self.nb_incr
-        else:
-            nb_cl = self.nb_base
-        return nb_cl
-
+    # TRAIN ON ONE CLASS BATCH
     def incremental_fit(self, iteration, train_loader, valid_loader):
         new_lr = self.lr_init
         optimizer = optim.SGD(filter(lambda p: p.requires_grad, self.network.parameters()), lr=new_lr, momentum=0.9,
@@ -163,204 +136,97 @@ class ICarl(AbstractMethod):
         scheduler = MultiStepLR(optimizer, steps, self.lr_factor)
 
         for epoch in range(self.epochs):
-            self.network.train()
-            train_loss = 0
-            train_correct = 0
-            train_total = 0
-            scheduler.step()
-
-            # In each epoch, we do a full pass over the training data:
-            for inputs, targets_prep in train_loader:
-
-                targets = np.zeros((inputs.shape[0], self.n_classes), np.float32)
-                targets[range(len(targets_prep)), targets_prep.type(torch.int32)] = 1.
-
-                inputs = inputs.to(self.device)
-
-                optimizer.zero_grad()
-                outputs = self.network.forward(inputs)  # feature vector only
-                prediction = self.network.predict(outputs)  # make the prediction with sigmoid, making g_y(xi)
-                targets = tensor(targets).to(outputs.device)
-                targets_prep = torch.LongTensor(targets_prep).to(outputs.device)
-
-                if iteration > 0 and self.distillation:  # apply distillation
-                    outputs_old = self.network2.forward(inputs)
-                    prediction_old = self.network2.predict(outputs_old)
-                    to = self.compute_num_classes(iteration-1)  # until the number of classes of last iteration
-                    targets[:, np.array(self.dataset.order[range(0, to)])] = \
-                        torch.sigmoid(prediction_old[:, np.array(self.dataset.order[range(0, to)])])
-
-                loss_bx = self.loss(prediction, targets)  # joins classification and distillation losses
-                loss_bx.backward()
-                optimizer.step()
-
-                train_loss += loss_bx.item()
-                _, predicted = prediction.max(1)
-                train_total += targets.size(0)
-                train_correct += predicted.eq(targets_prep).sum().item()
-
-            self.network.eval()
-            test_loss = 0
-            test_correct = 0
-            test_total = 0
-            for inputs, targets_prep in valid_loader:
-
-                targets = np.zeros((inputs.shape[0], self.n_classes), np.float32)
-                targets[range(len(targets_prep)), targets_prep.type(torch.int32)] = 1.
-
-                inputs = inputs.to(self.device)
-
-                outputs = self.network.forward(inputs)  # make the embedding
-                outputs = self.network.predict(outputs)  # make the prediction with sigmoid, making g_y(xi)
-                targets = torch.tensor(targets).to(outputs.device)
-                targets_prep = torch.LongTensor(targets_prep).to(outputs.device)
-
-                loss_bx = self.loss(outputs, targets)  # without distillation? -> YES, validation only on new classes
-
-                test_loss += loss_bx.item()
-                _, predicted = outputs.max(1)
-                test_total += targets.size(0)
-                test_correct += predicted.eq(targets_prep).sum().item()
-
-            train_acc = 100. * train_correct / train_total
-            test_acc = 100. * test_correct / test_total
-
-            self.logger.log_training(epoch, train_loss/len(train_loader), train_acc,
-                                     test_loss/len(valid_loader), test_acc, iteration)
+            train_loss, train_acc, test_loss, test_acc = \
+                self.observe(epoch, iteration, train_loader, valid_loader, scheduler, optimizer)
+            self.logger.log_training(epoch, train_loss, train_acc,
+                                     test_loss, test_acc, iteration)
+            if train_loss < 1e-4:
+                break
 
         # Duplicate current network to distillate info
         self.network2 = copy.deepcopy(self.network)
         self.network2.eval()
 
-    def update_exemplars(self, iteration):
-        nb_protos_cl = self.mem_size // self.compute_num_classes(iteration)  # num of exemplars per class
-        # Herding
+    # CORE OF TRAINING FUNCTIONS -> OBSERVE WILL TRAIN ONE EPOCH AND PERFORM VALIDATION
+    def observe(self, epoch, iteration, train_loader, valid_loader, scheduler, optimizer):
+        self.network.train()
+        train_loss = 0
+        train_correct = 0
+        train_total = 0
+        scheduler.step()
+
+        # In each epoch, we do a full pass over the training data:
+        for batch in train_loader:
+
+            optimizer.zero_grad()
+
+            loss_bx, trt_tot, trt_crc = self._compute_loss(batch, iteration)
+
+            loss_bx.backward()
+            optimizer.step()
+
+            train_loss += loss_bx.item()
+            train_total += trt_tot
+            train_correct += trt_crc
+
         self.network.eval()
+        test_loss = 0
+        test_correct = 0
+        test_total = 0
+        for inputs, targets_prep in valid_loader:
+            targets = np.zeros((inputs.shape[0], self.n_classes), np.float32)
+            targets[range(len(targets_prep)), targets_prep.type(torch.int32)] = 1.
 
-        # Prepare the protoset
-        x_protoset = None
-        y_protoset = None
+            inputs = inputs.to(self.device)
 
-        if nb_protos_cl > 0:
+            outputs = self.network.forward(inputs)  # make the embedding
+            outputs = self.network.predict(outputs)  # make the prediction with sigmoid, making g_y(xi)
+            targets = torch.tensor(targets).to(outputs.device)
+            targets_prep = torch.LongTensor(targets_prep).to(outputs.device)
 
-            for iter_dico in range(self.nb_classes(iteration)):
-                cl = self.dataset.order[self.compute_num_classes(iteration-1) + iter_dico].item()
+            loss_bx = self.loss(outputs, targets)  # without distillation? -> YES, validation only on new classes
 
-                # per controllare che sia in ordine, qui si potrebbe prendere classi e mapparle
-                pinput = self.dataset.get_dataloader_of_class(cl)
+            test_loss += loss_bx.item()
+            _, predicted = outputs.max(1)
+            test_total += targets.size(0)
+            test_correct += predicted.eq(targets_prep).sum().item()
 
-                output = []
-                for img, tar in pinput:
-                    img = img.to(self.device)
-                    output.append(self.network.forward(img).cpu().detach())
+        # normalize and print stats
+        train_acc = 100. * train_correct / train_total
+        test_acc = 100. * test_correct / test_total
+        train_loss /= len(train_loader)
+        test_loss /= len(valid_loader)
 
-                # Collect data in the feature space for each class
-                mapped_prototypes = torch.cat(output).numpy()
-                D = mapped_prototypes.T
-                D = D / np.linalg.norm(D, axis=0)
-                # Herding procedure : ranking of the potential exemplars
-                mu = np.mean(D, axis=1)
+        return train_loss, train_acc, test_loss, test_acc
 
-                # set exemplar to zero
-                self.alpha_dr_herding[cl] = np.zeros(mapped_prototypes.shape[0])  # number of rows
-                w_t = mu
-                iter_herding = 0
-                iter_herding_eff = 0
-                # Herding algorithm
-                while not (np.sum(self.alpha_dr_herding[cl] != 0) == min(nb_protos_cl, mapped_prototypes.shape[0])) \
-                        and iter_herding_eff < 1000:
-                    tmp_t = np.dot(w_t, D)
-                    ind_max = np.argmax(tmp_t)
-                    iter_herding_eff += 1
-                    if self.alpha_dr_herding[cl][ind_max] == 0:
-                        self.alpha_dr_herding[cl][ind_max] = 1 + iter_herding
-                        iter_herding += 1
-                    w_t = w_t + mu - D[:, ind_max]
+    def _compute_loss(self, batch, iteration):
+        inputs, targets_prep = batch
 
-            x_protoset = []
-            y_protoset = []
+        targets = np.zeros((inputs.shape[0], self.n_classes), np.float32)
+        targets[range(len(targets_prep)), targets_prep.type(torch.int32)] = 1.
 
-            # Storing the selected exemplars in the protoset
-            for iteration2 in range(iteration + 1):
+        inputs = inputs.to(self.device)
 
-                for iter_dico in range(self.nb_classes(iteration2)):
-                    # pick actual class
-                    cl = self.dataset.order[self.compute_num_classes(iteration2-1) + iter_dico].item()
+        outputs = self.network.forward(inputs)  # feature vector only
+        prediction = self.network.predict(outputs)  # make the prediction with sigmoid, making g_y(xi)
+        targets = tensor(targets).to(outputs.device)
+        targets_prep = torch.LongTensor(targets_prep).to(outputs.device)
 
-                    alph = self.alpha_dr_herding[cl]  # select the herd of the current class
-                    alph = (alph > 0) * (alph < nb_protos_cl + 1) * 1.  # put one in the ones to select
+        if iteration > 0 and self.distillation:  # apply distillation
+            outputs_old = self.network2.forward(inputs)
+            prediction_old = self.network2.predict(outputs_old)
+            to = self.compute_num_classes(iteration - 1)  # until the number of classes of last iteration
+            targets[:, np.array(self.dataset.order[range(0, to)])] = \
+                torch.sigmoid(prediction_old[:, np.array(self.dataset.order[range(0, to)])])
 
-                    # append exeplars in the protoset
-                    img = self.dataset.get_images_of_class(cl)
-                    x_protoset += [img[j] for j in range(len(alph)) if alph[j] == 1]
-                    y_protoset += [cl for j in range(len(alph)) if alph[j] == 1]
+        loss_bx = self.loss(prediction, targets)  # BCE joins classification and distillation losses
+        _, predicted = prediction.max(1)
+        train_total = targets.size(0)
+        train_correct = predicted.eq(targets_prep).sum().item()
 
-        return x_protoset, y_protoset
+        return loss_bx, train_total, train_correct
 
-    def compute_means(self, iteration):
-
-        class_means = np.zeros((self.features, self.n_classes, 3))
-        nb_protos_cl = self.mem_size // self.compute_num_classes(iteration)  # num of exemplars per class
-
-        if nb_protos_cl > 0:
-            for iteration2 in range(iteration + 1):
-
-                for iter_dico in range(self.nb_classes(iteration2)):
-                    # pick actual class
-                    cl = self.dataset.order[self.compute_num_classes(iteration2 - 1) + iter_dico].item()
-
-                    # compute network resposes for images of class cl
-                    pinput = self.dataset.get_dataloader_of_class(cl)
-                    output = []
-                    for img, tar in pinput:
-                        img = img.to(self.device)
-                        output.append(self.network.forward(img).cpu().detach())
-
-                    # Collect data in the feature space for each class
-                    mapped_prototypes = torch.cat(output).numpy()  # should be 500 x 64 in CIFAR
-                    D = mapped_prototypes.T  # now each column is a sample # 64 x 500
-                    D = D / np.linalg.norm(D, axis=0)  # 64 x 500
-
-                    # compute network resposes for images of class cl for flipped images
-                    flip = transforms.RandomHorizontalFlip(p=1)
-                    pinput = self.dataset.get_dataloader_of_class(cl, flip)
-                    output = []
-                    for img, tar in pinput:
-                        img = img.to(self.device)
-                        output.append(self.network.forward(img).cpu().detach())
-
-                    mapped_prototypes_flip = torch.cat(output).numpy()  # should be 500 x 64 in CIFAR
-                    D2 = mapped_prototypes_flip.T  # now each column is a sample # 64 x 500
-                    D2 = D2 / np.linalg.norm(D2, axis=0)  # 64 x 500
-
-                    # iCaRL
-                    alph = self.alpha_dr_herding[cl]  # importance of each image of this class
-                    dict_size = len(self.alpha_dr_herding[cl])
-                    alph = (alph > 0) * (alph < nb_protos_cl + 1) * 1.  # 1 if in the current herd
-
-                    # Handle the case in which there are no prototypes
-                    s = np.sum(alph)
-                    if s == 0:
-                        s = 1
-
-                    alph = alph / s  # to make the average only for the current prototypes.
-                    class_means[:, cl, 0] = (np.dot(D, alph))
-                    # dot operation is for weighting each f(xi) with alpha
-                    class_means[:, cl, 0] /= np.linalg.norm(class_means[:, cl, 0])
-
-                    # Inverted ICaRL
-                    class_means[:, cl, 2] = (np.dot(D, alph) + np.dot(D2, alph)) / 2
-                    # dot operation is for weighting each f(xi) with alpha
-                    class_means[:, cl, 2] /= np.linalg.norm(class_means[:, cl, 2])
-
-                    # Normal NCM
-                    alph = np.ones(dict_size) / dict_size  # to make the avg over all samples
-                    class_means[:, cl, 1] = (np.dot(D, alph))
-                    # dot operation is for weighting each f(xi) with alpha
-                    class_means[:, cl, 1] /= np.linalg.norm(class_means[:, cl, 1])
-
-        return class_means
-
+    # TEST
     def test(self, iteration, cumulative=True, class_means=None, conf_matrix=False):
 
         if class_means is None and self.mem_size > 0:
@@ -427,29 +293,154 @@ class ICarl(AbstractMethod):
 
         return top1_acc_list
 
-    def predict(self, inputs, method=0):
-        """
-        :return the predicted class for the inputs as tensor in cpu
+    # EXEMPLARS SECTION -> UPDATE EXEMPLARS THAT UPDATE HERD (COMPUTING AND UPDATING IT)
+    def update_exemplars(self, iteration):
+        nb_protos_cl = self.mem_size // self.compute_num_classes(iteration)  # num of exemplars per class
+        # Herding
+        self.network.eval()
 
-        :param inputs: tensors to be evaluated
-        :param method: 0 (def) is ICaRL, 1 is NCM, 2 is ICaRL-inv, 3 is with sigmoid (Hybrid 1)
-        """
+        # Prepare the protoset
+        x_protoset = None
+        y_protoset = None
 
-        if self.iteration_total > 0 and 0 <= method <= 3:
+        if nb_protos_cl > 0:
 
-            class_means = self.compute_means(self.iteration_total-1)
-            outputs = self.network.forward(inputs)  # returns embeddings
+            for iter_dico in range(self.nb_classes(iteration)):
+                cl = self.dataset.order[self.compute_num_classes(iteration-1) + iter_dico].item()
+                self._compute_herd(cl, nb_protos_cl)
 
-            if method == 3:
-                pred = self.network.predict(outputs).cpu().detach()
-            elif 0 <= method < 3:
-                outputs = outputs.cpu().detach().numpy()
-                outputs = (outputs.T / np.linalg.norm(outputs.T, axis=0)).T  # normalize output
-                sqd = cdist(class_means[:, :, method].T, outputs, 'sqeuclidean')  # Squared euclidean distance
-                score = (-sqd).T
-                pred = np.argsort(score, axis=1)[:, -1:]
-                pred = torch.tensor(pred)
+            x_protoset = []
+            y_protoset = []
 
-            return pred
+            # Storing the selected exemplars in the protoset
+            for iteration2 in range(iteration + 1):
+                for iter_dico in range(self.nb_classes(iteration2)):
+                    # pick actual class
+                    cl = self.dataset.order[self.compute_num_classes(iteration2-1) + iter_dico].item()
+                    x_p, y_p = self._update_herd(cl, nb_protos_cl)
+                    x_protoset += x_p
+                    y_protoset += y_p
+
+        return x_protoset, y_protoset
+
+    def _compute_herd(self, cl, nb_protos_cl):
+        # get a dataloader for current class (dataset already handle source and target distinction on cl)
+        pinput = self.dataset.get_dataloader_of_class(cl)
+
+        # compute output of classes
+        output = []
+        for img, tar in pinput:
+            img = img.to(self.device)
+            output.append(self.network.forward(img).cpu().detach())
+
+        # Collect data in the feature space for each class
+        mapped_prototypes = torch.cat(output).numpy()
+        D = mapped_prototypes.T
+        D = D / np.linalg.norm(D, axis=0)
+        # Herding procedure : ranking of the potential exemplars
+        mu = np.mean(D, axis=1)
+
+        # set exemplar to zero
+        self.alpha_dr_herding[cl] = np.zeros(mapped_prototypes.shape[0])  # number of rows
+        w_t = mu
+        iter_herding = 0
+        iter_herding_eff = 0
+        # Herding algorithm
+        while not (iter_herding == min(nb_protos_cl, mapped_prototypes.shape[0])) \
+                and iter_herding_eff < 10000:
+            tmp_t = np.dot(w_t, D)
+            ind_max = np.argmax(tmp_t)
+            iter_herding_eff += 1
+            if self.alpha_dr_herding[cl][ind_max] == 0:
+                self.alpha_dr_herding[cl][ind_max] = 1 + iter_herding
+                iter_herding += 1
+            w_t = w_t + mu - D[:, ind_max]
+
+    def _update_herd(self, cl, nb_protos_cl):
+        alph = self.alpha_dr_herding[cl]  # select the herd of the current class
+        alph = (alph > 0) * (alph < nb_protos_cl + 1) * 1.  # put one in the exemplars to select
+
+        # append exeplars in the protoset
+        img = self.dataset.get_images_of_class(cl)  # get images in the order (handled by dl) of cl-dl
+        x_protoset = [img[j] for j in range(len(alph)) if alph[j] == 1]
+        y_protoset = [cl for j in range(len(alph)) if alph[j] == 1]
+        return x_protoset, y_protoset
+
+    # MEAN SECTION
+    def compute_means(self, iteration):
+
+        class_means = np.zeros((self.features, self.n_classes, 3))
+        nb_protos_cl = self.mem_size // self.compute_num_classes(iteration)  # num of exemplars per class
+
+        if nb_protos_cl > 0:
+            for iteration2 in range(iteration + 1):
+                for iter_dico in range(self.nb_classes(iteration2)):
+                    cl = self.dataset.order[self.compute_num_classes(iteration2 - 1) + iter_dico].item()
+                    self._mean_of_class(class_means, cl, nb_protos_cl)
+
+        return class_means
+
+    def _mean_of_class(self, class_means, cl, nb_protos_cl):
+
+        # compute network resposes for images of class cl
+        pinput = self.dataset.get_dataloader_of_class(cl)
+        output = []
+        for img, tar in pinput:
+            img = img.to(self.device)
+            output.append(self.network.forward(img).cpu().detach())
+
+        # Collect data in the feature space for each class
+        mapped_prototypes = torch.cat(output).numpy()  # should be 500 x 64 in CIFAR
+        D = mapped_prototypes.T  # now each column is a sample # 64 x 500
+        D = D / np.linalg.norm(D, axis=0)  # 64 x 500
+
+        # compute network resposes for images of class cl for flipped images
+        flip = transforms.RandomHorizontalFlip(p=1)
+        pinput = self.dataset.get_dataloader_of_class(cl, flip)
+        output = []
+        for img, tar in pinput:
+            img = img.to(self.device)
+            output.append(self.network.forward(img).cpu().detach())
+
+        mapped_prototypes_flip = torch.cat(output).numpy()  # should be 500 x 64 in CIFAR
+        D2 = mapped_prototypes_flip.T  # now each column is a sample # 64 x 500
+        D2 = D2 / np.linalg.norm(D2, axis=0)  # 64 x 500
+
+        # iCaRL
+        alph = self.alpha_dr_herding[cl]  # importance of each image of this class
+        dict_size = len(self.alpha_dr_herding[cl])
+        alph = (alph > 0) * (alph < nb_protos_cl + 1) * 1.  # 1 if in the current herd
+
+        # Handle the case in which there are no prototypes
+        s = np.sum(alph)
+        if s == 0:
+            s = 1
+
+        alph = alph / s  # to make the average only for the current prototypes.
+        class_means[:, cl, 0] = (np.dot(D, alph))
+        # dot operation is for weighting each f(xi) with alpha
+        class_means[:, cl, 0] /= np.linalg.norm(class_means[:, cl, 0])
+
+        # Inverted ICaRL
+        class_means[:, cl, 2] = (np.dot(D, alph) + np.dot(D2, alph)) / 2
+        # dot operation is for weighting each f(xi) with alpha
+        class_means[:, cl, 2] /= np.linalg.norm(class_means[:, cl, 2])
+
+        # Normal NCM
+        alph = np.ones(dict_size) / dict_size  # to make the avg over all samples
+        class_means[:, cl, 1] = (np.dot(D, alph))
+        # dot operation is for weighting each f(xi) with alpha
+        class_means[:, cl, 1] /= np.linalg.norm(class_means[:, cl, 1])
+
+    # UTILS
+    def compute_num_classes(self, iteration):
+        if iteration < 0:
+            return 0
+        return self.nb_base + self.nb_incr * iteration
+
+    def nb_classes(self, iteration):
+        if iteration > 0:
+            nb_cl = self.nb_incr
         else:
-            raise Exception("Pass method between 0 and 3 inclusive")
+            nb_cl = self.nb_base
+        return nb_cl

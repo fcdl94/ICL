@@ -114,7 +114,7 @@ class ICarlRG(ICarlDA):
 
         outputs = self.network.forward(inputs)  # feature vector only
         prediction = self.network.predict(outputs)  # make the prediction with sigmoid, making g_y(xi)
-        domain_pred = self.network.discriminate_domain(outputs) # the predicted domain
+        domain_pred = self.network.discriminate_domain(outputs, self.lam) # the predicted domain
 
         targets = torch.tensor(targets).to(outputs.device)
         targets_prep = torch.LongTensor(targets_prep).to(outputs.device)
@@ -132,9 +132,9 @@ class ICarlRG(ICarlDA):
         train_total = targets.size(0)
         train_correct = predicted.eq(targets_prep).sum().item()
 
-        total_loss = loss_bx + self.constant * self.lam * loss_dm
+        total_loss = loss_bx + self.constant * loss_dm
         if self.count == 250:
-            print(f"Lam {self.lam} --- Class Loss {loss_bx:.4f} --- Domain Loss {self.lam * loss_dm}")
+            #print(f"Lam {self.lam} --- Class Loss {loss_bx:.4f} --- Domain Loss {self.lam * loss_dm}")
             self.count = 0
         self.count += 1
 

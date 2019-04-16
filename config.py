@@ -1,4 +1,6 @@
 from networks.networks import *
+from networks.svhn import *
+from networks.gtsrb import *
 from data import *
 from torchvision import transforms
 from methods.icarl import ICarl
@@ -20,6 +22,10 @@ sk_sk_train = 'sketchy/sketch_train'
 sk_sk_test = 'sketchy/sketch_test'
 sk_sk_full = 'sketchy/sketch'
 sk_order = 'sketchy/sketchy_order.csv'
+
+digits_order = 'digits_order.csv'
+
+sketchy_net_type = 'resnet50'
 
 config = {
     ############     CIFAR     ###################
@@ -126,7 +132,7 @@ config = {
             'validation_size': 0.2,
             'order_file': sk_order,
         },
-        'network-type': "wide",
+        'network-type': sketchy_net_type,
         'dataset': SingleDataloader
     },  # traditional setting, no DA, no ICL, on Photo
     'isketchy-ph': {
@@ -140,7 +146,7 @@ config = {
             'validation_size': 0.2,
             'order_file': sk_order,
         },
-        'network-type': "wide",
+        'network-type': sketchy_net_type,
         'dataset': SingleDataloader
     },  # ICL setting on photo (50 - 3*25)
     'sketchy-sk': {
@@ -154,7 +160,7 @@ config = {
             'validation_size': 0.2,
             'order_file': sk_order,
         },
-        'network-type': "wide",
+        'network-type': sketchy_net_type,
         'dataset': SingleDataloader
     },  # traditional setting, no DA, no ICL, on Sketch
     'isketchy-sk': {
@@ -168,7 +174,7 @@ config = {
             'validation_size': 0.2,
             'order_file': sk_order,
         },
-        'network-type': "wide",
+        'network-type': sketchy_net_type,
         'dataset': SingleDataloader
     },  # ICL setting on Sketch (50 - 3*25)
     'sketchy-sk-to-ph': {
@@ -182,7 +188,7 @@ config = {
             'validation_size': 0.2,
             'order_file': sk_order,
         },
-        'network-type': "wide",
+        'network-type': sketchy_net_type,
         'dataset': SingleDataloader
     },  # full DA setting Sketch -> Photo
     'isketchy-sk-to-ph': {
@@ -197,7 +203,7 @@ config = {
             'validation_size': 0.2,
             'order_file': sk_order,
         },
-        'network-type': "wide",
+        'network-type': sketchy_net_type,
         'dataset': IDADataloader
     },  # ICL+DA Sketch -> Photo (50 - 3*25)
     'sketchy-ph-to-sk': {
@@ -211,7 +217,7 @@ config = {
             'validation_size': 0.2,
             'order_file': sk_order,
         },
-        'network-type': "wide",
+        'network-type': sketchy_net_type,
         'dataset': SingleDataloader
     },   # full DA setting Photo -> Sketch
     'isketchy-ph-to-sk': {
@@ -226,9 +232,40 @@ config = {
             'validation_size': 0.2,
             'order_file': sk_order,
         },
-        'network-type': "wide",
+        'network-type': sketchy_net_type,
         'dataset': IDADataloader
-    }  # ICL+DA Photo -> Sketch (50 - 3*25)
+    },  # ICL+DA Photo -> Sketch (50 - 3*25)
+
+    ## DIGITS ##
+    "idigits-mnist": {
+        'n_classes': 10,
+        'n_features': 128*3*3,
+        'data_conf': {
+            'target': None,
+            'test': None,
+            'n_base': 5,  # 1 base
+            'n_incr': 5,  # 0 incremental
+            'validation_size': 0.2,
+            'order_file': digits_order,
+        },
+        'network-type': "svhn",
+        'dataset': MNISTDataloader
+    },
+    "idigits": {
+        'n_classes': 10,
+        'n_features': 128*3*3,
+        'data_conf': {
+            'target': None,
+            'test': None,
+            'n_base': 5,  # 1 base
+            'n_incr': 5,  # 0 incremental
+            'validation_size': 0.2,
+            'order_file': digits_order,
+        },
+        'network-type': "svhn",
+        'dataset': MNIST_to_SVHN_Dataloader
+    }
+
 }
 
 
@@ -283,15 +320,15 @@ def get_transform(name):
         augmentation = transforms.Compose([transforms.Resize((35, 35)),
                                            transforms.RandomHorizontalFlip(),
                                            transforms.RandomCrop((32, 32))])
-    elif 'sketchy' in name or 'dense' in name:
+    elif 'sketchy' in name:
         normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                          std=[0.229, 0.224, 0.225])
         # Normalize to have range between -1,1 : (x - 0.5) * 2
-        transform = transforms.Compose([transforms.Resize((64, 64)),
+        transform = transforms.Compose([transforms.Resize((224, 224)),
                                         transforms.ToTensor(),
                                         normalize])
         # Create data augmentation transform
-        augmentation = transforms.Compose([transforms.RandomResizedCrop((64, 64), (0.6, 1.)),
+        augmentation = transforms.Compose([transforms.RandomResizedCrop((224, 224), (0.6, 1.)),
                                            transforms.RandomHorizontalFlip()])
     elif 'office' in name:
         normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
@@ -305,6 +342,11 @@ def get_transform(name):
         augmentation = transforms.Compose([transforms.Resize(250),
                                            transforms.RandomHorizontalFlip(),
                                            transforms.RandomCrop((224, 224))])
+    elif 'digit' in name:
+        transform = transforms.Compose([transforms.Resize((28, 28)),
+                                        transforms.ToTensor(),
+                                        transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])])
+        augmentation = transforms.Compose([transforms.RandomCrop(28)])
 
     return transform, augmentation
 
@@ -317,14 +359,38 @@ def get_network(typ, da):
             return cifar_resnet_dial
         elif "revgrad" in da:
             return cifar_resnet_revgrad
-
+        else:
+            return NotImplementedError
     elif "wide" in typ:
         if da is None:
             return wide_resnet_dial
         elif "dial" in da:
             return wide_resnet
+        elif "revgrad" in da:
+            return wide_resnet_revgrad
         else:
             return NotImplementedError
+    elif "svhn" in typ:
+        if da is None or "revgrad" in da:
+            return svhn_net
+        elif "dial" in da:
+            return svhn_net_dial
+        else:  # "dial" in da:
+            return NotImplementedError
+    elif "gtsrb" in typ:
+        if da is None or "revgrad" in da:
+            return gtsrb_net
+        elif "dial" in da:
+            return gtsrb_net_dial
+        else:  #
+            return NotImplementedError
+    elif "resnet50" in typ:
+        if da is None or "revgrad" in da:
+            return resnet50
+        elif "dial" in da:
+            return resnet50_dial
+        else:
+            raise NotImplementedError
     else:
         raise NotImplementedError
 

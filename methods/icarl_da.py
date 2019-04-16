@@ -10,9 +10,9 @@ from scipy.spatial.distance import cdist
 from .common import *
 import logging
 
-ALL = 1000000
+ALL = 20 * 5
 LR = 2.
-MEM_SIZE = 20 * 100
+MEM_SIZE = 20 * 5
 DECAY = 0.00001
 EPOCHS = 70
 LR_FACTOR = 5.
@@ -246,8 +246,8 @@ class ICarlDA(AbstractMethod):
 
         return train_loss, train_acc, test_loss, test_acc
 
-    def _compute_loss(self, loader, iteration):
-        inputs, targets_prep = loader
+    def _compute_loss(self, batch, iteration):
+        inputs, targets_prep = batch
 
         targets = np.zeros((inputs.shape[0], self.n_classes), np.float32)
         targets[range(len(targets_prep)), targets_prep.type(torch.int32)] = 1.
