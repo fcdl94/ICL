@@ -5,6 +5,7 @@ from torchvision.datasets.folder import ImageFolder
 from .common import DatasetPrototypes, Subset, get_index_of_classes, split_dataset
 import torchvision.transforms
 import os
+from .mnist_m import MNISTM
 
 
 class DoubleDataset(torch.utils.data.Dataset):
@@ -267,7 +268,7 @@ class SingleDataloader(IDADataloader):
         return target, source, test
 
 
-class MNIST_to_SVHN_Dataloader(IDADataloader):
+class SVHN_to_MNIST_Dataloader(IDADataloader):
     def make_datasets(self, root, target, source, test, transform):
         target = torchvision.datasets.MNIST(root, train=True, transform=torchvision.transforms.Grayscale(3))
         source = torchvision.datasets.SVHN(root)
@@ -285,4 +286,13 @@ class MNISTDataloader(IDADataloader):
                                               [torchvision.transforms.Grayscale(3), transform]))
 
         test.targets = test.targets.numpy()  # only to remove the warning
+        return target, source, test
+
+
+class MNISTM_to_MNIST_Dataloader(IDADataloader):
+    def make_datasets(self, root, target, source, test, transform):
+        target = torchvision.datasets.MNIST(root, train=True, transform=torchvision.transforms.Grayscale(3))
+        source = MNISTM(root, train=True)
+        test = torchvision.datasets.MNIST(root, train=False, transform=torchvision.transforms.Compose(
+                                              [torchvision.transforms.Grayscale(3), transform]))
         return target, source, test

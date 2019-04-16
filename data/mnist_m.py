@@ -21,12 +21,10 @@ class MNISTM(data.Dataset):
 
     url = "https://github.com/VanushVaswani/keras_mnistm/releases/download/1.0/keras_mnistm.pkl.gz"
 
-    raw_folder = "raw"
-    processed_folder = "processed"
     training_file = "mnist_m_train.pt"
     test_file = "mnist_m_test.pt"
 
-    def __init__(self, root, mnist_root="data", train=True, transform=None, target_transform=None, download=False):
+    def __init__(self, root, mnist_root="MNIST", train=True, transform=None, target_transform=None, download=False):
         """Init MNIST-M dataset."""
         super(MNISTM, self).__init__()
         self.root = os.path.expanduser(root)
@@ -34,6 +32,9 @@ class MNISTM(data.Dataset):
         self.transform = transform
         self.target_transform = target_transform
         self.train = train  # training set or test set
+
+        self.raw_folder = "mnistm/raw"
+        self.processed_folder ="mnistm/processed"
 
         if download:
             self.download()

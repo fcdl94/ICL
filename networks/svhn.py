@@ -1,8 +1,15 @@
+"""
+This network are inspired to the ones defined in https://github.com/CuthbertCai/pytorch_DANN
+Credits to @CuthbertCai
+
+"""
+
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.nn.init as init
 from .rev_grad import grad_reverse as GRL
 from .dial import DomainAdaptationLayer as DAL
+
 
 class SVHN_net(nn.Module):
 
@@ -106,9 +113,80 @@ class SVHN_Domain_classifier(nn.Module):
         return logits
 
 
+class LeNet(nn.Module):
+
+    def __init__(self):
+        super(LeNet, self).__init__()
+        self.conv1 = nn.Conv2d(3, 32, kernel_size=5)
+        self.conv2 = nn.Conv2d(32, 48, kernel_size=5)
+        self.conv2_drop = nn.Dropout2d()
+        self.fc = Class_classifier()
+        self.dom_discr = Domain_classifier()
+
+    def set_domain(self, domain):
+        for mod in self.modules():
+            if isinstance(mod, DAL):
+                mod.set_domain(domain)
+
+    def set_source(self):
+        self.set_domain(0)
+
+    def set_target(self):
+        self.set_domain(1)
+
+    def forward(self, input):
+        input = input.expand(input.data.shape[0], 3, 28, 28)
+        x = F.relu(F.max_pool2d(self.conv1(input), 2))
+        x = F.relu(F.max_pool2d(self.conv2_drop(self.conv2(x)), 2))
+        x = x.view(-1, 48 * 4 * 4)
+
+        return x
+
+    def predict(self, x):
+        return self.fc(x)
+
+    def discriminate_domain(self, x, lam):
+        return self.dom_discr(x, lam)
+
+
+class Class_classifier(nn.Module):
+
+    def __init__(self):
+        super(Class_classifier, self).__init__()
+        self.fc1 = nn.Linear(48 * 4 * 4, 100)
+        self.fc2 = nn.Linear(100, 100)
+        self.fc3 = nn.Linear(100, 10)
+
+    def forward(self, input):
+        logits = F.relu(self.fc1(input))
+        logits = self.fc2(F.dropout(logits))
+        logits = F.relu(logits)
+        logits = self.fc3(logits)
+
+        return F.log_softmax(logits, 1)
+
+
+class Domain_classifier(nn.Module):
+
+    def __init__(self):
+        super(Domain_classifier, self).__init__()
+        self.fc1 = nn.Linear(48 * 4 * 4, 100)
+        self.fc2 = nn.Linear(100, 2)
+
+    def forward(self, input, constant):
+        input = GRL(input, constant)
+        logits = F.relu(self.fc1(input))
+        logits = F.log_softmax(self.fc2(logits), 1)
+
+        return logits
+
 def svhn_net(pretrained=None, num_classes=10):
     return SVHN_net(num_classes)
 
 
 def svhn_net_dial(pretrained=None, num_classes=10):
     return SVHN_net(num_classes, dial=True)
+
+
+def lenet_net(pretrained=None, num_classes=10):
+    return LeNet()

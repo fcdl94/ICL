@@ -237,7 +237,7 @@ config = {
     },  # ICL+DA Photo -> Sketch (50 - 3*25)
 
     ## DIGITS ##
-    "idigits-mnist": {
+    "isvhn-mnist": {
         'n_classes': 10,
         'n_features': 128*3*3,
         'data_conf': {
@@ -251,7 +251,7 @@ config = {
         'network-type': "svhn",
         'dataset': MNISTDataloader
     },
-    "idigits": {
+    "isvhn": {
         'n_classes': 10,
         'n_features': 128*3*3,
         'data_conf': {
@@ -263,9 +263,36 @@ config = {
             'order_file': digits_order,
         },
         'network-type': "svhn",
-        'dataset': MNIST_to_SVHN_Dataloader
+        'dataset': SVHN_to_MNIST_Dataloader
+    },
+    "imnistm-mnist": {
+        'n_classes': 10,
+        'n_features': 48 * 4 * 4,
+        'data_conf': {
+            'target': None,
+            'test': None,
+            'n_base': 5,  # 1 base
+            'n_incr': 5,  # 0 incremental
+            'validation_size': 0.2,
+            'order_file': digits_order,
+        },
+        'network-type': "mnist",
+        'dataset': MNISTDataloader
+    },
+    "imnistm": {
+        'n_classes': 10,
+        'n_features': 48 * 4 * 4,
+        'data_conf': {
+            'target': None,
+            'test': None,
+            'n_base': 5,  # 1 base
+            'n_incr': 5,  # 0 incremental
+            'validation_size': 0.2,
+            'order_file': digits_order,
+        },
+        'network-type': "mnist",
+        'dataset': MNISTM_to_MNIST_Dataloader
     }
-
 }
 
 
@@ -342,7 +369,7 @@ def get_transform(name):
         augmentation = transforms.Compose([transforms.Resize(250),
                                            transforms.RandomHorizontalFlip(),
                                            transforms.RandomCrop((224, 224))])
-    elif 'digit' in name:
+    elif 'svhn' in name or 'mnist' in name:
         transform = transforms.Compose([transforms.Resize((28, 28)),
                                         transforms.ToTensor(),
                                         transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])])
@@ -376,6 +403,11 @@ def get_network(typ, da):
         elif "dial" in da:
             return svhn_net_dial
         else:  # "dial" in da:
+            return NotImplementedError
+    elif "mnist" in typ:
+        if da is None or "revgrad" in da:
+            return lenet_net
+        else:
             return NotImplementedError
     elif "gtsrb" in typ:
         if da is None or "revgrad" in da:
