@@ -27,6 +27,8 @@ digits_order = 'digits_order.csv'
 
 sketchy_net_type = 'resnet50'
 
+validation_size = 0.2
+
 config = {
     ############     CIFAR     ###################
     'icifar': {
@@ -36,7 +38,7 @@ config = {
             'target': None,
             'test': None,
             'source': None,
-            'validation_size': 0.2,
+            'validation_size': validation_size,
             'n_base': 10,   # 1 base
             'n_incr': 10,   # 9 incremental
         },
@@ -50,7 +52,7 @@ config = {
             'target': None,
             'test': None,
             'source': None,
-            'validation_size': 0.2,
+            'validation_size': validation_size,
             'n_base': 100,   # 1 base
             'n_incr': 0,     # 0 incremental
         },
@@ -68,7 +70,7 @@ config = {
             'source': None,
             'n_base': 43,  # 0 base
             'n_incr': 0,  # 1 incremental
-            'validation_size': 0.2,
+            'validation_size': validation_size,
             'order_file': gtsrb_order,
         },
         'network-type': "cifar",
@@ -83,7 +85,7 @@ config = {
             'source': None,
             'n_base': 13,  # 0 base
             'n_incr': 10,  # 1 incremental
-            'validation_size': 0.2,
+            'validation_size': validation_size,
             'order_file': gtsrb_order,
         },
         'network-type': "cifar",
@@ -98,7 +100,7 @@ config = {
             'source': None,
             'n_base': 43,  # 0 base
             'n_incr': 0,  # 1 incremental
-            'validation_size': 0.2,
+            'validation_size': validation_size,
             'order_file': gtsrb_order,
         },
         'network-type': "cifar",
@@ -113,7 +115,7 @@ config = {
             'source': synt_sign,
             'n_base': 13,  # 1 base
             'n_incr': 10,  # 3 incremental
-            'validation_size': 0.2,
+            'validation_size': validation_size,
             'order_file': gtsrb_order,
         },
         'network-type': "cifar",
@@ -129,8 +131,9 @@ config = {
             'test': sk_ph_test,
             'n_base': 125,  # 1 base
             'n_incr': 0,    # 0 incremental
-            'validation_size': 0.2,
+            'validation_size': validation_size,
             'order_file': sk_order,
+            'batch_size': 32
         },
         'network-type': sketchy_net_type,
         'dataset': SingleDataloader
@@ -143,8 +146,9 @@ config = {
             'test': sk_ph_test,
             'n_base': 50,  # 1 base
             'n_incr': 25,  # 0 incremental
-            'validation_size': 0.2,
+            'validation_size': validation_size,
             'order_file': sk_order,
+            'batch_size': 32
         },
         'network-type': sketchy_net_type,
         'dataset': SingleDataloader
@@ -157,8 +161,9 @@ config = {
             'test': sk_sk_test,
             'n_base': 125,  # 1 base
             'n_incr': 0,  # 0 incremental
-            'validation_size': 0.2,
+            'validation_size': validation_size,
             'order_file': sk_order,
+            'batch_size': 32
         },
         'network-type': sketchy_net_type,
         'dataset': SingleDataloader
@@ -171,8 +176,9 @@ config = {
             'test': sk_sk_test,
             'n_base': 50,  # 1 base
             'n_incr': 25,  # 3 incremental
-            'validation_size': 0.2,
+            'validation_size': validation_size,
             'order_file': sk_order,
+            'batch_size': 32
         },
         'network-type': sketchy_net_type,
         'dataset': SingleDataloader
@@ -185,8 +191,9 @@ config = {
             'test': sk_ph_test,
             'n_base': 125,  # 1 base
             'n_incr': 0,    # 0 incremental
-            'validation_size': 0.2,
+            'validation_size': validation_size,
             'order_file': sk_order,
+            'batch_size': 32
         },
         'network-type': sketchy_net_type,
         'dataset': SingleDataloader
@@ -200,8 +207,9 @@ config = {
             'test': sk_ph_test,
             'n_base': 50,  # 1 base
             'n_incr': 25,  # 0 incremental
-            'validation_size': 0.2,
+            'validation_size': validation_size,
             'order_file': sk_order,
+            'batch_size': 32
         },
         'network-type': sketchy_net_type,
         'dataset': IDADataloader
@@ -214,8 +222,9 @@ config = {
             'test': sk_sk_test,
             'n_base': 125,  # 1 base
             'n_incr': 0,  # 0 incremental
-            'validation_size': 0.2,
+            'validation_size': validation_size,
             'order_file': sk_order,
+            'batch_size': 32
         },
         'network-type': sketchy_net_type,
         'dataset': SingleDataloader
@@ -229,8 +238,9 @@ config = {
             'test': sk_sk_test,
             'n_base': 50,  # 1 base
             'n_incr': 25,  # 0 incremental
-            'validation_size': 0.2,
+            'validation_size': validation_size,
             'order_file': sk_order,
+            'batch_size': 32
         },
         'network-type': sketchy_net_type,
         'dataset': IDADataloader
@@ -245,7 +255,7 @@ config = {
             'test': None,
             'n_base': 5,  # 1 base
             'n_incr': 5,  # 0 incremental
-            'validation_size': 0.2,
+            'validation_size': validation_size,
             'order_file': digits_order,
         },
         'network-type': "svhn",
@@ -259,7 +269,7 @@ config = {
             'test': None,
             'n_base': 5,  # 1 base
             'n_incr': 5,  # 0 incremental
-            'validation_size': 0.2,
+            'validation_size': validation_size,
             'order_file': digits_order,
         },
         'network-type': "svhn",
@@ -273,7 +283,7 @@ config = {
             'test': None,
             'n_base': 5,  # 1 base
             'n_incr': 5,  # 0 incremental
-            'validation_size': 0.2,
+            'validation_size': validation_size,
             'order_file': digits_order,
         },
         'network-type': "mnist",
@@ -287,7 +297,7 @@ config = {
             'test': None,
             'n_base': 5,  # 1 base
             'n_incr': 5,  # 0 incremental
-            'validation_size': 0.2,
+            'validation_size': validation_size,
             'order_file': digits_order,
         },
         'network-type': "mnist",
@@ -355,7 +365,7 @@ def get_transform(name):
                                         transforms.ToTensor(),
                                         normalize])
         # Create data augmentation transform
-        augmentation = transforms.Compose([transforms.RandomResizedCrop((224, 224), (0.6, 1.)),
+        augmentation = transforms.Compose([transforms.RandomResizedCrop(224, (0.6, 1.)),
                                            transforms.RandomHorizontalFlip()])
     elif 'office' in name:
         normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],

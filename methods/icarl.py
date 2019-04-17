@@ -133,6 +133,7 @@ class ICarl(AbstractMethod):
         optimizer = optim.SGD(filter(lambda p: p.requires_grad, self.network.parameters()), lr=new_lr, momentum=0.9,
                               weight_decay=self.decay, nesterov=False)
         steps = [round(int(self.epochs * 0.7)), round(int(self.epochs * 0.9))]
+        # implementare LR come in DANN e vedere se performance aumentano
         scheduler = MultiStepLR(optimizer, steps, self.lr_factor)
 
         for epoch in range(self.epochs):

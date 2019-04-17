@@ -6,6 +6,7 @@ from .common import DatasetPrototypes, Subset, get_index_of_classes, split_datas
 import torchvision.transforms
 import os
 from .mnist_m import MNISTM
+import logging
 
 
 class DoubleDataset(torch.utils.data.Dataset):
@@ -103,6 +104,12 @@ class IDADataloader:
         self.order = self.full_order[run_number]
         self.data_loader = None
 
+        logging.info(f"Batch_size {batch_size}\n"
+                     f"Num_incr {n_incr}\n"
+                     f"Num base {n_base}\n"
+                     f"Transform {transform}\n"
+                     f"Augmentation {augmentation}\n")
+
     def make_datasets(self, root, target, source, test, transform):
         target = ImageFolder(os.path.join(root, target), None, None)
         source = ImageFolder(os.path.join(root, source), None, None)
@@ -188,8 +195,10 @@ class IDADataloader:
             valid_indices = get_index_of_classes(self.target_valid_labels, classes)
             valid_dataset = Subset(self.target_valid, valid_indices)
 
-            train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=self.workers)
-            valid_loader = DataLoader(valid_dataset, batch_size=self.batch_size, shuffle=False,num_workers=self.workers)
+            train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True,
+                                      num_workers=self.workers, drop_last=True)
+            valid_loader = DataLoader(valid_dataset, batch_size=self.batch_size, shuffle=False,
+                                      num_workers=self.workers, drop_last=True)
 
         elif 0 < iteration < self.num_iteration_max:  # we are in the source classes, return the concat
             dataset_full = self.source_train
@@ -211,13 +220,13 @@ class IDADataloader:
                 target_dataset = target_prototypes
                 train_dataset = DoubleDataset(train_dataset, target_dataset)  # make double ds to return both tuples
                 train_loader = DataLoader(train_dataset, batch_size=self.batch_size // 2, shuffle=True,
-                                          num_workers=self.workers)
+                                          num_workers=self.workers, drop_last=True)
             else:  # we are not using target prototypes even if we are in iteration >= 1
                 train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True,
-                                          num_workers=self.workers)
+                                          num_workers=self.workers, drop_last=True)
 
             valid_loader = DataLoader(valid_dataset, batch_size=self.batch_size, shuffle=False,
-                                      num_workers=self.workers)
+                                      num_workers=self.workers, drop_last=True)
         else:
             raise Exception("You should stop before, you asked too many iterations")
 

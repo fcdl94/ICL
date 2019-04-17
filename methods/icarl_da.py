@@ -151,6 +151,8 @@ class ICarlDA(AbstractMethod):
                 self.observe(epoch, iteration, train_loader, valid_loader, scheduler, optimizer)
             # update statistics
             self.logger.log_training(epoch, train_loss, train_acc, test_loss, test_acc, iteration)
+            if train_loss < 1e-4:
+                break
 
         # Duplicate current network to distillate info
         self.network2 = copy.deepcopy(self.network)

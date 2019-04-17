@@ -104,8 +104,7 @@ venv.bak/
 .mypy_cache/
 
 # not useful folders
-Massi
-logs
-models
-checkpoint
+logs/
+models/
+checkpoint/
 .idea
