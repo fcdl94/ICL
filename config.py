@@ -284,7 +284,7 @@ config = {
         'network-type': "svhn",
         'dataset': SVHN_to_MNIST_Dataloader
     },
-    "imnistm-mnist": {
+    "imnistm-mnistm": {
         'n_classes': 10,
         'n_features': 48 * 4 * 4,
         'data_conf': {
@@ -296,7 +296,7 @@ config = {
             'order_file': digits_order,
         },
         'network-type': "mnist",
-        'dataset': MNISTDataloader
+        'dataset': MNISTMDataloader
     },
     "imnistm": {
         'n_classes': 10,
@@ -310,7 +310,7 @@ config = {
             'order_file': digits_order,
         },
         'network-type': "mnist",
-        'dataset': MNISTM_to_MNIST_Dataloader
+        'dataset': MNIST_to_MNISTM_Dataloader
     },
     ## IMAGENET CALTECH ##
     'imagenet-caltech': {

@@ -293,15 +293,21 @@ class MNISTDataloader(IDADataloader):
         source = target
         test = torchvision.datasets.MNIST(root, train=False, transform=torchvision.transforms.Compose(
                                               [torchvision.transforms.Grayscale(3), transform]))
-
-        test.targets = test.targets.numpy()  # only to remove the warning
         return target, source, test
 
 
-class MNISTM_to_MNIST_Dataloader(IDADataloader):
+class MNISTMDataloader(IDADataloader):
     def make_datasets(self, root, target, source, test, transform):
-        target = torchvision.datasets.MNIST(root, train=True, transform=torchvision.transforms.Grayscale(3))
-        source = MNISTM(root, train=True)
-        test = torchvision.datasets.MNIST(root, train=False, transform=torchvision.transforms.Compose(
-                                              [torchvision.transforms.Grayscale(3), transform]))
+        target = MNISTM(root, train=True)
+        source = target
+        test = MNISTM(root, train=False, transform=transform)
+
+        return target, source, test
+
+
+class MNIST_to_MNISTM_Dataloader(IDADataloader):
+    def make_datasets(self, root, target, source, test, transform):
+        source = torchvision.datasets.MNIST(root, train=True, transform=torchvision.transforms.Grayscale(3))
+        target = MNISTM(root, train=True)
+        test = MNISTM(root, train=False, transform=transform)
         return target, source, test

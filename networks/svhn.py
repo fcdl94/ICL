@@ -136,8 +136,8 @@ class LeNet(nn.Module):
 
     def forward(self, input):
         input = input.expand(input.data.shape[0], 3, 28, 28)
-        x = F.relu(F.max_pool2d(self.conv1(input), 2))
-        x = F.relu(F.max_pool2d(self.conv2_drop(self.conv2(x)), 2))
+        x = F.max_pool2d(F.relu(self.conv1(input)), 2)
+        x = F.max_pool2d(F.relu(self.conv2_drop(self.conv2(x))), 2)
         x = x.view(-1, 48 * 4 * 4)
 
         return x
