@@ -23,9 +23,18 @@ sk_sk_test = 'sketchy/sketch_test'
 sk_sk_full = 'sketchy/sketch'
 sk_order = 'sketchy/sketchy_order.csv'
 
+imagenet = 'imagenet_caltech/imagenet84'
+imagenet_train = 'imagenet_caltech/imagenet84_train'
+imagenet_test = 'imagenet_caltech/imagenet84_test'
+
+caltech = 'imagenet_caltech/caltech84'
+caltech_train = 'imagenet_caltech/caltech84_train'
+caltech_test = 'imagenet_caltech/caltech84_test'
+
+imagenet_caltech_order = None
 digits_order = 'digits_order.csv'
 
-sketchy_net_type = 'resnet50'
+largescale_net_type = 'resnet50'
 
 validation_size = 0.2
 
@@ -135,7 +144,7 @@ config = {
             'order_file': sk_order,
             'batch_size': 32
         },
-        'network-type': sketchy_net_type,
+        'network-type': largescale_net_type,
         'dataset': SingleDataloader
     },  # traditional setting, no DA, no ICL, on Photo
     'isketchy-ph': {
@@ -150,7 +159,7 @@ config = {
             'order_file': sk_order,
             'batch_size': 32
         },
-        'network-type': sketchy_net_type,
+        'network-type': largescale_net_type,
         'dataset': SingleDataloader
     },  # ICL setting on photo (50 - 3*25)
     'sketchy-sk': {
@@ -165,7 +174,7 @@ config = {
             'order_file': sk_order,
             'batch_size': 32
         },
-        'network-type': sketchy_net_type,
+        'network-type': largescale_net_type,
         'dataset': SingleDataloader
     },  # traditional setting, no DA, no ICL, on Sketch
     'isketchy-sk': {
@@ -180,7 +189,7 @@ config = {
             'order_file': sk_order,
             'batch_size': 32
         },
-        'network-type': sketchy_net_type,
+        'network-type': largescale_net_type,
         'dataset': SingleDataloader
     },  # ICL setting on Sketch (50 - 3*25)
     'sketchy-sk-to-ph': {
@@ -195,7 +204,7 @@ config = {
             'order_file': sk_order,
             'batch_size': 32
         },
-        'network-type': sketchy_net_type,
+        'network-type': largescale_net_type,
         'dataset': SingleDataloader
     },  # full DA setting Sketch -> Photo
     'isketchy-sk-to-ph': {
@@ -211,7 +220,7 @@ config = {
             'order_file': sk_order,
             'batch_size': 32
         },
-        'network-type': sketchy_net_type,
+        'network-type': largescale_net_type,
         'dataset': IDADataloader
     },  # ICL+DA Sketch -> Photo (50 - 3*25)
     'sketchy-ph-to-sk': {
@@ -226,7 +235,7 @@ config = {
             'order_file': sk_order,
             'batch_size': 32
         },
-        'network-type': sketchy_net_type,
+        'network-type': largescale_net_type,
         'dataset': SingleDataloader
     },   # full DA setting Photo -> Sketch
     'isketchy-ph-to-sk': {
@@ -242,7 +251,7 @@ config = {
             'order_file': sk_order,
             'batch_size': 32
         },
-        'network-type': sketchy_net_type,
+        'network-type': largescale_net_type,
         'dataset': IDADataloader
     },  # ICL+DA Photo -> Sketch (50 - 3*25)
 
@@ -302,7 +311,41 @@ config = {
         },
         'network-type': "mnist",
         'dataset': MNISTM_to_MNIST_Dataloader
+    },
+    ## IMAGENET CALTECH ##
+    'imagenet-caltech': {
+        'n_classes': 84,
+        'n_features': 256,
+        'data_conf': {
+            'target': imagenet_train,
+            'test': imagenet_test,
+            'source': caltech,
+            'n_base': 44,  # 1 base
+            'n_incr': 20,  # 2 incremental
+            'validation_size': validation_size,
+            'order_file': imagenet_caltech_order,
+            'batch_size': 32
+        },
+        'network-type': largescale_net_type,
+        'dataset': IDADataloader
+    },
+    'caltech-imagenet': {
+        'n_classes': 84,
+        'n_features': 256,
+        'data_conf': {
+            'target': caltech_train,
+            'test': caltech_test,
+            'source': imagenet,
+            'n_base': 44,  # 1 base
+            'n_incr': 20,  # 2 incremental
+            'validation_size': validation_size,
+            'order_file': imagenet_caltech_order,
+            'batch_size': 32
+        },
+        'network-type': largescale_net_type,
+        'dataset': IDADataloader
     }
+
 }
 
 
@@ -357,7 +400,7 @@ def get_transform(name):
         augmentation = transforms.Compose([transforms.Resize((35, 35)),
                                            transforms.RandomHorizontalFlip(),
                                            transforms.RandomCrop((32, 32))])
-    elif 'sketchy' in name:
+    elif 'sketchy' in name or 'imagenet' in name:
         normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                          std=[0.229, 0.224, 0.225])
         # Normalize to have range between -1,1 : (x - 0.5) * 2

@@ -65,12 +65,14 @@ n_incr = config['data_conf']['n_incr']
 torch.manual_seed(args.seed)
 np.random.seed(seed=args.seed)
 
-for run in range(args.from_run, args.to_run):
-    create_log_folder(f"logs/{args.setting}/run{run}/")
-    print(f"Logs will be saved in logs/{args.setting}/run{run}/{log}.train")
-    logging.basicConfig(level=logging.INFO, format="%(message)s",
-                        filename=f"logs/{args.setting}/run{run}/{log}.train", filemode='a')
+create_log_folder(f"logs/{args.setting}/")
+print(f"Logs will be saved in logs/{args.setting}/{log}.train")
+logging.basicConfig(level=logging.INFO, format="%(message)s",
+                    filename=f"logs/{args.setting}/{log}.train", filemode='a')
 
+for run in range(args.from_run, args.to_run):
+
+    logging.info(f"START run {run}")
     # get the data
     data = config['dataset'](args.root, **config['data_conf'], run_number=run, workers=8)
     # define network

@@ -132,9 +132,14 @@ class ICarlRG(ICarlDA):
         train_total = targets.size(0)
         train_correct = predicted.eq(targets_prep).sum().item()
 
+        domain_acc = torch.sigmoid(domain_pred.detach()).mean().cpu().item()
+        if not target:
+            domain_acc = 1 - domain_acc
+
         total_loss = loss_bx + self.constant * loss_dm
         if self.count == 250:
-            #print(f"Lam {self.lam} --- Class Loss {loss_bx:.4f} --- Domain Loss {self.lam * loss_dm}")
+            print(f"Lam {self.lam} --- Class Loss {loss_bx:.4f} "
+                  f"--- Domain Loss {loss_dm} --- {'TarDom' if target else 'SrcDom'} Acc {domain_acc:.3f}")
             self.count = 0
         self.count += 1
 
