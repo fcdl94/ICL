@@ -21,9 +21,9 @@ class TensorboardXLogger:
 
 
     def save_results(self, name, acc_base, acc_new, acc_cum, iteration):
-        self.writer.add_scalar(name+'_base', acc_base, iteration)
-        self.writer.add_scalar(name+'_new', acc_new, iteration)
-        self.writer.add_scalar(name+'_cum', acc_cum, iteration)
+        self.writer.add_scalar('results/'+name+'_base', acc_base, iteration)
+        self.writer.add_scalar('results/'+name+'_new', acc_new, iteration)
+        self.writer.add_scalar('results/'+name+'_cum', acc_cum, iteration)
 
     def print_accuracy(self, methods, acc_base, acc_new, acc_cum):
         logging.info("Cumulative results")
@@ -43,9 +43,9 @@ class TensorboardXLogger:
         if self.iteration != iteration:
             self.iteration = iteration
 
-        self.writer.add_scalars(f'loss-{iteration}', {'train': train_loss,
+        self.writer.add_scalars(f'loss/loss-{iteration}', {'train': train_loss,
                                                       'valid': valid_loss}, epoch)
-        self.writer.add_scalars(f'acc-{iteration}', {'train': train_acc,
+        self.writer.add_scalars(f'acc/acc-{iteration}', {'train': train_acc,
                                                      'valid': valid_acc}, epoch)
 
         for k in kwargs:
@@ -91,7 +91,7 @@ class TensorboardXLogger:
         self.writer.add_figure('conf_matrix', fig, self.iteration)
 
         avg_acc = np.diag(cm).mean() * 100.
-        self.writer.add_scalar('avg_acc', avg_acc, self.iteration)
+        self.writer.add_scalar('results/avg_acc', avg_acc, self.iteration)
         logging.info(f"Per class accuracy: {avg_acc}")
         return conf
 
