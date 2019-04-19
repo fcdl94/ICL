@@ -21,8 +21,9 @@ class TensorboardXLogger:
         self.writer.add_scalar('valid_loss', valid_loss, epoch)
         self.writer.add_scalar('valid_acc', valid_acc, epoch)
 
-        for k, v in kwargs:
-            self.writer.add_scalar(k, v, epoch)
+        for k in kwargs:
+            self.writer.add_scalar(k, kwargs[k], epoch)
+            print(kwargs[k])
 
     def conf_matrix_figure(self, cm, classes):
         fig, ax = plt.subplots()
