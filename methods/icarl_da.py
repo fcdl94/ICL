@@ -124,7 +124,7 @@ class ICarlDA(AbstractMethod):
             for j, name in enumerate(METHODS):
                 acc_dict[name].append(acc[j])
 
-        self.logger.save_per_batch_result(acc_dict)
+        self.logger.per_batch_results(acc_dict)
 
         torch.save(
             {

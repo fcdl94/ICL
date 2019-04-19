@@ -103,30 +103,31 @@ class ICarl(AbstractMethod):
 
                 self.logger.print_accuracy(METHODS, acc_base, acc_new, acc_cum)
 
+                cumulative_accuracies.append(acc_cum)
+
                 for i, name in enumerate(METHODS):
                     self.logger.save_results(name, acc_base[i], acc_new[i], acc_cum[i], iteration)
 
-            # PRINT CUMULATIVE and PER-BATCH result!
-            acc_dict = {name: [acc_cum[i]] for i, name in enumerate(METHODS)}
-            tot = self.iteration_total - 1
+        acc_dict = {name: [acc_cum[i]] for i, name in enumerate(METHODS)}
+        tot = self.iteration_total - 1
+        means = self.compute_means(tot)
+        for i in range(tot + 1):  # compute per class batch results
+            acc = self.test(i, cumulative=False, class_means=means)
+            for j, name in enumerate(METHODS):
+                acc_dict[name].append(acc[j])
 
-            means = self.compute_means(tot)
+        self.logger.per_batch_results(acc_dict)
 
-            for i in range(tot + 1):  # compute per class batch results
-                acc = self.test(i, cumulative=False, class_means=means)
-                for j, name in enumerate(METHODS):
-                    acc_dict[name].append(acc[j])
+        torch.save(
+            {
+                "network": self.network.state_dict()
+            },
+            f"models/{self.name}.pth"
+        )
 
-            self.logger.save_per_batch_result(acc_dict)
+        return acc_dict
 
-            torch.save(
-                {
-                    "network": self.network.state_dict()
-                },
-                f"models/{self.name}.pth"
-            )
-
-            return acc_dict
+        return cumulative_accuracies
 
     # TRAIN ON ONE CLASS BATCH
     def incremental_fit(self, iteration, train_loader, valid_loader):

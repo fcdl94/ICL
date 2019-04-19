@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 
 class TensorboardXLogger:
     def __init__(self, path, name):
-        self.writer = SummaryWriter(log_dir=path)
+        self.writer = SummaryWriter(log_dir=path+"/"+name)
         self.iteration = 0
         self.name = name
         self.path = path
@@ -19,11 +19,10 @@ class TensorboardXLogger:
             file.write(f"{self.name},{mname},{results}\n")
         file.close()
 
-
     def save_results(self, name, acc_base, acc_new, acc_cum, iteration):
-        self.writer.add_scalar('results/'+name+'_base', acc_base, iteration)
-        self.writer.add_scalar('results/'+name+'_new', acc_new, iteration)
-        self.writer.add_scalar('results/'+name+'_cum', acc_cum, iteration)
+        self.writer.add_scalars('results', {name+'_base': acc_base}, iteration)
+        self.writer.add_scalars('results', {name+'_new': acc_new}, iteration)
+        self.writer.add_scalars('results', {name+'_cum': acc_cum}, iteration)
 
     def print_accuracy(self, methods, acc_base, acc_new, acc_cum):
         logging.info("Cumulative results")
@@ -91,7 +90,7 @@ class TensorboardXLogger:
         self.writer.add_figure('conf_matrix', fig, self.iteration)
 
         avg_acc = np.diag(cm).mean() * 100.
-        self.writer.add_scalar('results/avg_acc', avg_acc, self.iteration)
+        self.writer.add_scalars('results', {'avg_acc': avg_acc}, self.iteration)
         logging.info(f"Per class accuracy: {avg_acc}")
         return conf
 
