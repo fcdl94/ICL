@@ -67,7 +67,7 @@ class SVHN_net(nn.Module):
         x = F.relu(self.bn2(self.conv2(x)))
         x = F.max_pool2d(x, 3, 2)
         x = F.relu(self.bn3(self.conv3(x)))
-        #x = self.conv3_drop(x)
+        x = self.conv3_drop(x)
 
         feat = x.view(-1, 128 * 3 * 3)
 
@@ -96,7 +96,7 @@ class SVHN_Domain_classifier(nn.Module):
 
     def forward(self, feat, lam):
         x = GRL(feat, lam)
-        x = F.relu(self.bn1(self.fc1(input)))
+        x = F.relu(self.bn1(self.fc1(x)))
         x = F.dropout(x)
         x = F.relu(self.bn2(self.fc2(x)))
         x = F.dropout(x)
