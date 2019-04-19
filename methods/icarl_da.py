@@ -114,7 +114,10 @@ class ICarlDA(AbstractMethod):
         # PRINT CUMULATIVE and PER-BATCH result!
         acc_dict = {name: [acc_cum[i]] for i, name in enumerate(METHODS)}
         tot = self.iteration_total - 1
-        means = self.compute_means(tot)
+        if self.protos:
+            means = self.compute_means(tot)
+        else:
+            means = None
 
         for i in range(tot+1):  # compute per class batch results
             acc = self.test(i, cumulative=False, class_means=means)
