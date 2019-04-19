@@ -19,7 +19,7 @@ class ICarlRG(ICarlDA):
         train_loss = 0
         train_correct = 0
         train_total = 0
-
+        self.count = 0
         # steps
         start_steps = epoch * len(train_loader)
         total_steps = self.epochs * len(train_loader)
@@ -144,10 +144,9 @@ class ICarlRG(ICarlDA):
             domain_acc = 1 - domain_acc
 
         total_loss = loss_bx + self.constant * loss_dm
-        if self.count == 200 or self.count == 0:
-            logging.info(f"Lam {self.lam:.4f} --- Class Loss {loss_bx:.4f} "
+        if self.count % 400 == 0 or self.count % 400 == 1:
+            logging.info(f"{self.count:5d}: Lam {self.lam:.4f} --- Class Loss {loss_bx:.4f} "
                          f"--- Domain Loss {loss_dm:4f} --- {'TarDom' if target else 'SrcDom'} Acc {domain_acc:.3f}")
-            self.count = -1
         self.count += 1
 
         return total_loss, train_total, train_correct, loss_bx

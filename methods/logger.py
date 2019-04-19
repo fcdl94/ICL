@@ -50,7 +50,7 @@ class TensorboardXLogger:
                         ha="center", va="center",
                         color="white" if cm[i, j] > thresh else "black")
         fig.tight_layout()
-        return ax
+        return fig
 
     def confusion_matrix(self, y, y_hat, n_classes):
         conf = np.zeros((n_classes, n_classes))
@@ -63,8 +63,9 @@ class TensorboardXLogger:
         fig = self.conf_matrix_figure(cm, np.arange(n_classes))
         self.writer.add_figure('conf_matrix', fig, self.iteration)
 
-
-        logging.info(f"Per class accuracy: { np.diag(cm).mean() * 100.}")
+        avg_acc = np.diag(cm).mean() * 100.
+        self.writer.add_scalar('avg_acc', avg_acc, self.iteration)
+        logging.info(f"Per class accuracy: {avg_acc}")
         return conf
 
 
