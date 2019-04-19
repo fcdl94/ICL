@@ -16,14 +16,13 @@ class TensorboardXLogger:
         if self.iteration != iteration:
             self.iteration = iteration
 
-        self.writer.add_scalar('train_loss', train_loss, epoch)
-        self.writer.add_scalar('train_acc', train_acc, epoch)
-        self.writer.add_scalar('valid_loss', valid_loss, epoch)
-        self.writer.add_scalar('valid_acc', valid_acc, epoch)
+        self.writer.add_scalars(f'loss-{iteration}', {'train': train_loss,
+                                                      'valid': valid_loss}, epoch)
+        self.writer.add_scalars(f'acc-{iteration}', {'train': train_acc,
+                                                     'valid': valid_acc}, epoch)
 
         for k in kwargs:
             self.writer.add_scalar(k, kwargs[k], epoch)
-            print(kwargs[k])
 
     def conf_matrix_figure(self, cm, classes):
         fig, ax = plt.subplots()
