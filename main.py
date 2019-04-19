@@ -39,7 +39,7 @@ parser.add_argument('-m', '--method', default='icarl', help='Method to be tested
 parser.add_argument('-d', '--da', default=None, help='Domain adaptation method')
 parser.add_argument('-l', '--log', default=None, help='Method name where are saved logs and results')
 parser.add_argument('-c', '--config_file', default=None, help='Config file where to get parameters for training')
-parser.add_argument('--seed', default=42, type=int, help='The random seed to use')
+parser.add_argument('--seed', default=None, type=int, help='The random seed to use')
 
 
 args = parser.parse_args()
@@ -63,8 +63,9 @@ n_base = config['data_conf']['n_base']
 n_incr = config['data_conf']['n_incr']
 
 # fix for reproducibility
-torch.manual_seed(args.seed)
-np.random.seed(seed=args.seed)
+if args.seed is not None:
+    torch.manual_seed(args.seed)
+    np.random.seed(seed=args.seed)
 
 create_log_folder(f"logs/{args.setting}/")
 print(f"Logs will be saved in logs/{args.setting}/{log}.train")
