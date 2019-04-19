@@ -101,31 +101,34 @@ class ICarl(AbstractMethod):
                 acc_new = self.test(iteration, class_means=means, cumulative=False)
                 acc_base = self.test(0, class_means=means)
 
-                print_accuracy(METHODS, acc_base, acc_new, acc_cum)
-
-                cumulative_accuracies.append(acc_cum)
+                self.logger.print_accuracy(METHODS, acc_base, acc_new, acc_cum)
 
                 for i, name in enumerate(METHODS):
-                    save_results(f"{self.log_folder}/{name}.csv",
-                                 acc_base[i], acc_new[i], acc_cum[i])
+                    self.logger.save_results(name, acc_base[i], acc_new[i], acc_cum[i], iteration)
 
-        acc_cum = []
-        tot = self.iteration_total - 1
-        means = self.compute_means(tot)
-        for i in range(tot+1):
-            acc_cum.append(self.test(i, cumulative=False, class_means=means))
+            # PRINT CUMULATIVE and PER-BATCH result!
+            acc_dict = {name: [acc_cum[i]] for i, name in enumerate(METHODS)}
+            tot = self.iteration_total - 1
+            if self.protos:
+                means = self.compute_means(tot)
+            else:
+                means = None
 
-        save_per_batch_result(f"{self.log_folder}/per-batch.csv",
-                                           ["iCaRL", "Hybrid", "NCM", "iCaRL-INV"], acc_cum)
+            for i in range(tot + 1):  # compute per class batch results
+                acc = self.test(i, cumulative=False, class_means=means)
+                for j, name in enumerate(METHODS):
+                    acc_dict[name].append(acc[j])
 
-        torch.save(
-            {
-                "network": self.network.state_dict()
-            },
-            f"models/icarl{datetime.now().isoformat()}.pth"
-        )
+            self.logger.save_per_batch_result(acc_dict)
 
-        return cumulative_accuracies
+            torch.save(
+                {
+                    "network": self.network.state_dict()
+                },
+                f"models/{self.name}.pth"
+            )
+
+            return acc_dict
 
     # TRAIN ON ONE CLASS BATCH
     def incremental_fit(self, iteration, train_loader, valid_loader):

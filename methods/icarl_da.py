@@ -16,7 +16,7 @@ MEM_SIZE = 20 * 5
 DECAY = 0.00001
 EPOCHS = 70
 LR_FACTOR = 5.
-METHODS = ["iCaRL", "Hybrid", "NCM", "iCaRL-INV"]
+METHODS = ["iCaRL", "Hybrid", "NCM"]
 
 DEVICE = 'cpu'
 if torch.cuda.is_available():
@@ -71,7 +71,6 @@ class ICarlDA(AbstractMethod):
         self.dataset = dataset
         if epochs is not None:
             self.epochs = epochs
-        cumulative_accuracies = []
 
         for iteration in range(0, self.iteration_total):
             # first iteration on target data
@@ -105,17 +104,15 @@ class ICarlDA(AbstractMethod):
             acc_src = self.test(iteration, class_means=means, cumulative=False, target=False, data_loader=valid_dataloader)
             acc_base = self.test(0, class_means=means)
 
-            print_accuracy(METHODS, acc_base, acc_new, acc_cum)
+            self.logger.print_accuracy(METHODS, acc_base, acc_new, acc_cum)
             logging.info("Use Source Statistics for new batch!")
-            print_accuracy(METHODS, acc_base, acc_src, acc_cum)
-
-            cumulative_accuracies.append(acc_cum)
+            self.logger.print_accuracy(METHODS, acc_base, acc_src, acc_cum)
 
             for i, name in enumerate(METHODS):
-                save_results(f"{self.log_folder}/{name}.csv",
-                             acc_base[i], acc_new[i], acc_cum[i])
+                self.logger.save_results(name, acc_base[i], acc_new[i], acc_cum[i], iteration)
 
-        acc_cum = []
+        # PRINT CUMULATIVE and PER-BATCH result!
+        acc_dict = {name: [acc_cum[i]] for i, name in enumerate(METHODS)}
         tot = self.iteration_total - 1
         if self.protos:
             means = self.compute_means(tot)
@@ -123,10 +120,11 @@ class ICarlDA(AbstractMethod):
             means = None
 
         for i in range(tot+1):  # compute per class batch results
-            acc_cum.append(self.test(i, cumulative=False, class_means=means))
+            acc = self.test(i, cumulative=False, class_means=means)
+            for j, name in enumerate(METHODS):
+                acc_dict[name].append(acc[j])
 
-        save_per_batch_result(f"{self.log_folder}/per-batch.csv",
-                              ["iCaRL", "Hybrid", "NCM", "iCaRL-INV"], acc_cum)
+        self.logger.save_per_batch_result(acc_dict)
 
         torch.save(
             {
@@ -135,7 +133,7 @@ class ICarlDA(AbstractMethod):
             f"models/{self.name}.pth"
         )
 
-        return cumulative_accuracies
+        return acc_dict
 
     # TRAIN ON ONE CLASS BATCH
     def incremental_fit(self, iteration, train_loader, valid_loader):

@@ -4,21 +4,6 @@ from .logger import TensorboardXLogger
 import logging
 
 
-def log_training(epoch, train_loss, train_acc, valid_loss, valid_acc):
-    logging.debug(f"Epoch {epoch + 1:3d} : Train Loss {train_loss:.6f}, Train Acc {train_acc:.2f}\n"
-                  f"          : Valid Loss {valid_loss:.6f}, Valid Acc {valid_acc:.2f}")
-
-
-def save_results(file, acc_base, acc_new, acc_cum):
-    print_header = False
-    if not os.path.isfile(file):
-        print_header = True
-    with open(file, "a") as f:
-        if print_header:
-            f.write("acc_base,acc_new,acc_cum\n")
-        f.write(f"{acc_base},{acc_new},{acc_cum}\n")
-
-
 def save_per_batch_result(file, methods, acc):
     with open(file, "a") as f:
         f.write("Batch," + ",".join(methods) + "\n")

@@ -9,6 +9,33 @@ class TensorboardXLogger:
     def __init__(self, path, name):
         self.writer = SummaryWriter(log_dir=path)
         self.iteration = 0
+        self.name = name
+        self.path = path
+
+    def per_batch_results(self, acc_cum):
+        file = open(self.path+"/results.txt", "a")
+        for mname in acc_cum:
+            results = ",".join([f"{x:.3f}" for x in acc_cum[mname]])
+            file.write(f"{self.name},{mname},{results}\n")
+        file.close()
+
+
+    def save_results(self, name, acc_base, acc_new, acc_cum, iteration):
+        self.writer.add_scalar(name+'_base', acc_base, iteration)
+        self.writer.add_scalar(name+'_new', acc_new, iteration)
+        self.writer.add_scalar(name+'_cum', acc_cum, iteration)
+
+    def print_accuracy(self, methods, acc_base, acc_new, acc_cum):
+        logging.info("Cumulative results")
+        for i, m in enumerate(methods):
+            logging.info(f"  top 1 accuracy {m:<15}:\t{acc_cum[i]:.2f}")
+        logging.info("New batch results")
+        for i, m in enumerate(methods):
+            logging.info(f"  top 1 accuracy {m:<15}:\t{acc_new[i]:.2f}")
+        logging.info("First results")
+        for i, m in enumerate(methods):
+            logging.info(f"  top 1 accuracy {m:<15}:\t{acc_base[i]:.2f}")
+        logging.info("")
 
     def log_training(self, epoch, train_loss, train_acc, valid_loss, valid_acc, iteration, **kwargs):
         logging.info(f"Epoch {epoch + 1:3d} : Train Loss {train_loss:.6f}, Train Acc {train_acc:.2f}\n"

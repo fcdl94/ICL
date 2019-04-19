@@ -84,7 +84,7 @@ for run in range(args.from_run, args.to_run):
     method = conf.get_method(args.method, da_method=args.da, config=args.config_file, network=network,
                              n_classes=config['n_classes'], n_base=n_base, n_incr=n_incr, lr_init=args.lr,
                              features=config['n_features'], target_mem_size=args.mem_size, mem_size=args.mem_size,
-                             log=f"logs/{args.setting}/run{run}/{log}", name=f"{args.setting}-{run}-{log}")
+                             log=f"logs/{args.setting}/run{run}", name=f"{args.setting}-{run}-{log}")
     # run fit!
     acc = method.fit(data, epochs=args.epochs)
     logging.info(f"END run {run}")
