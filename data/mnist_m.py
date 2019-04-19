@@ -32,6 +32,7 @@ class MNISTM(data.Dataset):
         self.transform = transform
         self.target_transform = target_transform
         self.train = train  # training set or test set
+        self.classes = list(range(0, 10))
 
         self.raw_folder = "mnistm/raw"
         self.processed_folder ="mnistm/processed"

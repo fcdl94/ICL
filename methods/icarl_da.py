@@ -11,7 +11,7 @@ from .common import *
 import logging
 
 ALL = 20 * 5
-LR = 2.
+LR = 0.01
 MEM_SIZE = 20 * 5
 DECAY = 0.00001
 EPOCHS = 70
@@ -21,6 +21,8 @@ METHODS = ["iCaRL", "Hybrid", "NCM", "iCaRL-INV"]
 DEVICE = 'cpu'
 if torch.cuda.is_available():
     DEVICE = 'cuda'
+
+INVERTED = False
 
 
 class ICarlDA(AbstractMethod):
@@ -100,12 +102,12 @@ class ICarlDA(AbstractMethod):
 
             acc_cum = self.test(iteration, class_means=means, conf_matrix=True)
             acc_new = self.test(iteration, class_means=means, cumulative=False)
-            acc_new_src = self.test(iteration, class_means=means, cumulative=False, target=False)
+            acc_src = self.test(iteration, class_means=means, cumulative=False, target=False, data_loader=valid_dataloader)
             acc_base = self.test(0, class_means=means)
 
             print_accuracy(METHODS, acc_base, acc_new, acc_cum)
             logging.info("Use Source Statistics for new batch!")
-            print_accuracy(METHODS, acc_base, acc_new_src, acc_cum)
+            print_accuracy(METHODS, acc_base, acc_src, acc_cum)
 
             cumulative_accuracies.append(acc_cum)
 
@@ -139,16 +141,22 @@ class ICarlDA(AbstractMethod):
     def incremental_fit(self, iteration, train_loader, valid_loader):
         new_lr = self.lr_init
         # define optimizer SGD
-        optimizer = optim.SGD(filter(lambda p: p.requires_grad, self.network.parameters()), lr=new_lr, momentum=0.9,
-                              weight_decay=self.decay, nesterov=False)
-        steps = [round(int(self.epochs * 0.7)), round(int(self.epochs * 0.9))]
-        scheduler = MultiStepLR(optimizer, steps, self.lr_factor)
+        #optimizer = optim.SGD(filter(lambda p: p.requires_grad, self.network.parameters()), lr=new_lr, momentum=0.9,
+        #                      weight_decay=self.decay, nesterov=False)
+        #steps = [round(int(self.epochs * 0.7)), round(int(self.epochs * 0.9))]
+        #scheduler = MultiStepLR(optimizer, steps, self.lr_factor)
 
         # for "epochs" epochs run observe on train and valid dataloader
         for epoch in range(self.epochs):
             # compute epoch
+            # train epoch
+            learning_rate = self.lr_init / ((1 + 10 * epoch / self.epochs) ** 0.75)  # as define in DANN
+            logging.info(f"Learning rate: {learning_rate}")
+            optimizer = optim.SGD(filter(lambda p: p.requires_grad, self.network.parameters()), lr=learning_rate,
+                                  momentum=0.9, weight_decay=self.decay, nesterov=False)
+            # scheduler.step()
             train_loss, train_acc, test_loss, test_acc = \
-                self.observe(epoch, iteration, train_loader, valid_loader, scheduler, optimizer)
+                self.observe(epoch, iteration, train_loader, valid_loader, optimizer)
             # update statistics
             self.logger.log_training(epoch, train_loss, train_acc, test_loss, test_acc, iteration)
             if train_loss < 1e-4:
@@ -156,17 +164,16 @@ class ICarlDA(AbstractMethod):
 
         # Duplicate current network to distillate info
         self.network2 = copy.deepcopy(self.network)
-        # todo change here to train and test it
-        self.network2.eval()
+        # change here to eval to roll-back
+        self.network2.train()
 
     # CORE OF TRAINING FUNCTIONS -> OBSERVE WILL TRAIN ONE EPOCH AND PERFORM VALIDATION
-    def observe(self, epoch, iteration, train_loader, valid_loader, scheduler, optimizer):
+    def observe(self, epoch, iteration, train_loader, valid_loader, optimizer):
         # start with training
         self.network.train()
         train_loss = 0
         train_correct = 0
         train_total = 0
-        scheduler.step()
 
         if iteration == 0 or not self.protos:  # if I DON'T use protos (I don't use them in first iteration as well)
             if iteration == 0:
@@ -228,10 +235,10 @@ class ICarlDA(AbstractMethod):
 
             inputs = inputs.to(self.device)
 
-            outputs = self.network.forward(inputs)  # make the embedding
-            outputs = self.network.predict(outputs)  # make the prediction with sigmoid, making g_y(xi)
-            targets = torch.tensor(targets).to(outputs.device)
-            targets_prep = torch.LongTensor(targets_prep).to(outputs.device)
+            logits, feats = self.network.forward(inputs)  # make the embedding
+            outputs = self.network.predict(logits)  # make the prediction with sigmoid, making g_y(xi)
+            targets = torch.tensor(targets).to(self.device)
+            targets_prep = torch.LongTensor(targets_prep).to(self.device)
 
             loss_bx = self.loss(outputs, targets)  # without distillation? -> YES, validation only on new classes
 
@@ -256,14 +263,14 @@ class ICarlDA(AbstractMethod):
 
         inputs = inputs.to(self.device)
 
-        outputs = self.network.forward(inputs)  # feature vector only
-        prediction = self.network.predict(outputs)  # make the prediction with sigmoid, making g_y(xi)
-        targets = tensor(targets).to(outputs.device)
-        targets_prep = torch.LongTensor(targets_prep).to(outputs.device)
+        logits, feats = self.network.forward(inputs)  # make the embedding
+        prediction = self.network.predict(logits)  # make the prediction with sigmoid, making g_y(xi)
+        targets = torch.tensor(targets).to(self.device)
+        targets_prep = torch.LongTensor(targets_prep).to(self.device)
 
         if iteration > 0 and self.distillation:  # apply distillation
-            outputs_old = self.network2.forward(inputs)
-            prediction_old = self.network2.predict(outputs_old)
+            logits_old, feats_old = self.network2.forward(inputs)
+            prediction_old = self.network2.predict(logits_old)
             to = self.compute_num_classes(iteration - 1)  # until the number of classes of last iteration
             targets[:, np.array(self.dataset.order[range(0, to)])] = \
                 torch.sigmoid(prediction_old[:, np.array(self.dataset.order[range(0, to)])])
@@ -276,7 +283,7 @@ class ICarlDA(AbstractMethod):
         return loss_bx, train_total, train_correct
 
     # TEST
-    def test(self, iteration, cumulative=True, class_means=None, conf_matrix=False, target=True):
+    def test(self, iteration, cumulative=True, class_means=None, conf_matrix=False, target=True, data_loader=None):
 
         top1_acc_list = np.zeros(4)
 
@@ -285,7 +292,8 @@ class ICarlDA(AbstractMethod):
         stat_ncm = []
         stat_icarl_i = []
 
-        data_loader = self.dataset.test_dataloader(iteration, cumulative=cumulative)
+        if data_loader is None:
+            data_loader = self.dataset.test_dataloader(iteration, cumulative=cumulative)
 
         target_total = []
         target_pred = []
@@ -300,9 +308,9 @@ class ICarlDA(AbstractMethod):
             inputs = inputs.to(self.device)
 
             # compute prediction
-            outputs = self.network.forward(inputs)  # returns embeddings
-            pred = self.network.predict(outputs).cpu().detach().numpy()  # return score classes as logits
-            outputs = outputs.cpu().detach().numpy()
+            logits, feats = self.network.forward(inputs)  # returns embeddings
+            pred = self.network.predict(logits).cpu().detach().numpy()  # return score classes as logits
+            outputs = logits.cpu().detach().numpy()
 
             outputs = (outputs.T / np.linalg.norm(outputs.T, axis=0)).T  # normalize output
 
@@ -314,16 +322,19 @@ class ICarlDA(AbstractMethod):
                 sqd = cdist(class_means[:, :, 0].T, outputs, 'sqeuclidean')  # Squared euclidean distance
                 score_icarl = (-sqd).T
                 # Compute score for iCaRL-Inverted
-                sqd = cdist(class_means[:, :, 2].T, outputs, 'sqeuclidean')  # Squared euclidean distance
-                score_icarl_inv = (-sqd).T
+                if INVERTED:
+                    sqd = cdist(class_means[:, :, 2].T, outputs, 'sqeuclidean')  # Squared euclidean distance
+                    score_icarl_inv = (-sqd).T
                 # Compute score for NCM
                 sqd = cdist(class_means[:, :, 1].T, outputs, 'sqeuclidean')  # Squared euclidean distance
                 score_ncm = (-sqd).T
 
                 stat_icarl += ([ll in best for ll, best in zip(targets_prep, np.argsort(score_icarl, axis=1)[:, -1:])])
-                stat_icarl_i += ([ll in best for ll, best in zip(targets_prep, np.argsort(score_icarl_inv, axis=1)[:, -1:])])
                 stat_ncm += ([ll in best for ll, best in zip(targets_prep, np.argsort(score_ncm, axis=1)[:, -1:])])
                 target_pred += [i.item() for i in np.argsort(score_icarl, axis=1)[:, -1:]]
+                if INVERTED:
+                    stat_icarl_i += (
+                        [ll in best for ll, best in zip(targets_prep, np.argsort(score_icarl_inv, axis=1)[:, -1:])])
             else:  # otherwise use H1 (special case to handle LwF)
                 target_pred += [i.item() for i in np.argsort(pred, axis=1)[:, -1:]]
 
@@ -335,7 +346,7 @@ class ICarlDA(AbstractMethod):
         top1_acc_list[0] = np.average(stat_icarl) * 100. if class_means is not None else 0.     # ICarl
         top1_acc_list[1] = np.average(stat_hb1) * 100.                                          # Hybrid 1
         top1_acc_list[2] = np.average(stat_ncm) * 100. if class_means is not None else 0.       # NCM
-        top1_acc_list[3] = np.average(stat_icarl_i) * 100. if class_means is not None else 0.   # ICaRL inv
+        top1_acc_list[3] = np.average(stat_icarl_i) * 100. if (class_means is not None and INVERTED) else 0. # ICaRL inv
         # print confusion matrix
         if conf_matrix:
             self.logger.confusion_matrix(self.reorder_target(target_total),
@@ -398,9 +409,10 @@ class ICarlDA(AbstractMethod):
         output = []
         for img, tar in pinput:
             img = img.to(self.device)
-            output.append(self.network.forward(img).cpu().detach())
+            output.append(self.network.forward(img)[0].cpu().detach())
 
         # Collect data in the feature space for each class
+        #TODO DO THIS IN GPU
         mapped_prototypes = torch.cat(output).numpy()
         D = mapped_prototypes.T
         D = D / np.linalg.norm(D, axis=0)
@@ -465,24 +477,26 @@ class ICarlDA(AbstractMethod):
         output = []
         for img, tar in pinput:
             img = img.to(self.device)
-            output.append(self.network.forward(img).cpu().detach())
+            output.append(self.network.forward(img)[0].cpu().detach())
 
         # Collect data in the feature space for each class
         mapped_prototypes = torch.cat(output).numpy()  # should be 500 x 64 in CIFAR
+        # todo implement this in PyTorch using GPU!
         D = mapped_prototypes.T  # now each column is a sample # 64 x 500
         D = D / np.linalg.norm(D, axis=0)  # 64 x 500
 
-        # compute network resposes for images of class cl for flipped images
-        flip = transforms.RandomHorizontalFlip(p=1)
-        pinput = self.dataset.get_dataloader_of_class(cl, flip)
-        output = []
-        for img, tar in pinput:
-            img = img.to(self.device)
-            output.append(self.network.forward(img).cpu().detach())
+        if INVERTED:
+            # compute network resposes for images of class cl for flipped images
+            flip = transforms.RandomHorizontalFlip(p=1)
+            pinput = self.dataset.get_dataloader_of_class(cl, flip)
+            output = []
+            for img, tar in pinput:
+                img = img.to(self.device)
+                output.append(self.network.forward(img)[0].cpu().detach())
 
-        mapped_prototypes_flip = torch.cat(output).numpy()  # should be 500 x 64 in CIFAR
-        D2 = mapped_prototypes_flip.T  # now each column is a sample # 64 x 500
-        D2 = D2 / np.linalg.norm(D2, axis=0)  # 64 x 500
+            mapped_prototypes_flip = torch.cat(output).numpy()  # should be 500 x 64 in CIFAR
+            D2 = mapped_prototypes_flip.T  # now each column is a sample # 64 x 500
+            D2 = D2 / np.linalg.norm(D2, axis=0)  # 64 x 500
 
         # iCaRL
         alph = self.alpha_dr_herding[cl]  # importance of each image of this class
@@ -500,9 +514,10 @@ class ICarlDA(AbstractMethod):
         class_means[:, cl, 0] /= np.linalg.norm(class_means[:, cl, 0])
 
         # Inverted ICaRL
-        class_means[:, cl, 2] = (np.dot(D, alph) + np.dot(D2, alph)) / 2
-        # dot operation is for weighting each f(xi) with alpha
-        class_means[:, cl, 2] /= np.linalg.norm(class_means[:, cl, 2])
+        if INVERTED:
+            class_means[:, cl, 2] = (np.dot(D, alph) + np.dot(D2, alph)) / 2
+            # dot operation is for weighting each f(xi) with alpha
+            class_means[:, cl, 2] /= np.linalg.norm(class_means[:, cl, 2])
 
         # Normal NCM
         alph = np.ones(dict_size) / dict_size  # to make the avg over all samples

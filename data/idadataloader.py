@@ -36,7 +36,7 @@ class IDADataloader:
     def __init__(self, root, target=None, source=None, test=None,
                  n_base=10, n_incr=10,
                  augmentation=None, transform=None, validation_size=0.2,
-                 order_file=None, batch_size=64, run_number=0, workers=1):
+                 order_file=None, batch_size=128, run_number=0, workers=1):
         super().__init__()
         # Incremental domain adaptation: N classes + k_times*M classes
         # where Domain(N) != Domain(M) (if M==N we recover ICL without DA)

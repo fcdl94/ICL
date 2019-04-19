@@ -11,14 +11,13 @@ class ICarlRG(ICarlDA):
         self.domain_criterion = nn.BCEWithLogitsLoss()
         self.lam = 0
         self.count = 0
-        self.constant = 0.01
+        self.constant = 1
 
-    def observe(self, epoch, iteration, train_loader, valid_loader, scheduler, optimizer):
+    def observe(self, epoch, iteration, train_loader, valid_loader, optimizer):
         self.network.train()
         train_loss = 0
         train_correct = 0
         train_total = 0
-        scheduler.step()
 
         # steps
         start_steps = epoch * len(train_loader)
@@ -81,10 +80,10 @@ class ICarlRG(ICarlDA):
 
             inputs = inputs.to(self.device)
 
-            outputs = self.network.forward(inputs)  # make the embedding
-            outputs = self.network.predict(outputs)  # make the prediction with sigmoid, making g_y(xi)
-            targets = torch.tensor(targets).to(outputs.device)
-            targets_prep = torch.LongTensor(targets_prep).to(outputs.device)
+            logits, feats = self.network.forward(inputs)  # make the embedding
+            outputs = self.network.predict(logits)  # make the prediction with sigmoid, making g_y(xi)
+            targets = torch.tensor(targets).to(self.device)
+            targets_prep = torch.LongTensor(targets_prep).to(self.device)
 
             loss_bx = self.loss(outputs, targets)  # without distillation? -> YES, validation only on new classes
 
@@ -112,16 +111,16 @@ class ICarlRG(ICarlDA):
 
         inputs = inputs.to(self.device)
 
-        outputs = self.network.forward(inputs)  # feature vector only
-        prediction = self.network.predict(outputs)  # make the prediction with sigmoid, making g_y(xi)
-        domain_pred = self.network.discriminate_domain(outputs, self.lam) # the predicted domain
+        logits, feats = self.network.forward(inputs)  # make the embedding
+        prediction = self.network.predict(logits)  # make the prediction with sigmoid, making g_y(xi)
+        domain_pred = self.network.discriminate_domain(feats, self.lam) # the predicted domain
 
-        targets = torch.tensor(targets).to(outputs.device)
-        targets_prep = torch.LongTensor(targets_prep).to(outputs.device)
+        targets = torch.tensor(targets).to(self.device)
+        targets_prep = torch.LongTensor(targets_prep).to(self.device)
 
         if iteration > 0 and self.distillation:  # apply distillation
-            outputs_old = self.network2.forward(inputs)
-            prediction_old = self.network2.predict(outputs_old)
+            logits_old, feat_old = self.network2.forward(inputs)
+            prediction_old = self.network2.predict(logits_old)
             to = self.compute_num_classes(iteration - 1)  # until the number of classes of last iteration
             targets[:, np.array(self.dataset.order[range(0, to)])] = \
                 torch.sigmoid(prediction_old[:, np.array(self.dataset.order[range(0, to)])])

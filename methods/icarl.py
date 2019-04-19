@@ -180,10 +180,10 @@ class ICarl(AbstractMethod):
 
             inputs = inputs.to(self.device)
 
-            outputs = self.network.forward(inputs)  # make the embedding
-            outputs = self.network.predict(outputs)  # make the prediction with sigmoid, making g_y(xi)
-            targets = torch.tensor(targets).to(outputs.device)
-            targets_prep = torch.LongTensor(targets_prep).to(outputs.device)
+            logits, feat = self.network.forward(inputs)  # make the embedding
+            outputs = self.network.predict(logits)  # make the prediction with sigmoid, making g_y(xi)
+            targets = torch.tensor(targets).to(self.device)
+            targets_prep = torch.LongTensor(targets_prep).to(self.device)
 
             loss_bx = self.loss(outputs, targets)  # without distillation? -> YES, validation only on new classes
 
@@ -208,14 +208,14 @@ class ICarl(AbstractMethod):
 
         inputs = inputs.to(self.device)
 
-        outputs = self.network.forward(inputs)  # feature vector only
-        prediction = self.network.predict(outputs)  # make the prediction with sigmoid, making g_y(xi)
-        targets = tensor(targets).to(outputs.device)
-        targets_prep = torch.LongTensor(targets_prep).to(outputs.device)
+        logits, feat = self.network.forward(inputs)  # feature vector only
+        prediction = self.network.predict(logits)  # make the prediction with sigmoid, making g_y(xi)
+        targets = tensor(targets).to(self.device)
+        targets_prep = torch.LongTensor(targets_prep).to(self.device)
 
         if iteration > 0 and self.distillation:  # apply distillation
-            outputs_old = self.network2.forward(inputs)
-            prediction_old = self.network2.predict(outputs_old)
+            logits_old, feat_old = self.network2.forward(inputs)
+            prediction_old = self.network2.predict(logits_old)
             to = self.compute_num_classes(iteration - 1)  # until the number of classes of last iteration
             targets[:, np.array(self.dataset.order[range(0, to)])] = \
                 torch.sigmoid(prediction_old[:, np.array(self.dataset.order[range(0, to)])])
@@ -228,7 +228,7 @@ class ICarl(AbstractMethod):
         return loss_bx, train_total, train_correct
 
     # TEST
-    def test(self, iteration, cumulative=True, class_means=None, conf_matrix=False):
+    def test(self, iteration, cumulative=True, class_means=None, conf_matrix=False, data_loader=None):
 
         if class_means is None and self.mem_size > 0:
             class_means = self.compute_means(iteration)
@@ -240,7 +240,8 @@ class ICarl(AbstractMethod):
         stat_ncm = []
         stat_icarl_i = []
 
-        data_loader = self.dataset.test_dataloader(iteration, cumulative=cumulative)
+        if data_loader is None:
+            data_loader = self.dataset.test_dataloader(iteration, cumulative=cumulative)
 
         target_total = []
         target_icarl = []
@@ -249,7 +250,7 @@ class ICarl(AbstractMethod):
             inputs = inputs.to(self.device)
 
             # compute prediction
-            outputs = self.network.forward(inputs)  # returns embeddings
+            outputs, _ = self.network.forward(inputs)  # returns embeddings
             pred = self.network.predict(outputs).cpu().detach().numpy()  # return score classes as logits
             outputs = outputs.cpu().detach().numpy()
 
@@ -332,7 +333,7 @@ class ICarl(AbstractMethod):
         output = []
         for img, tar in pinput:
             img = img.to(self.device)
-            output.append(self.network.forward(img).cpu().detach())
+            output.append(self.network.forward(img)[0].cpu().detach())
 
         # Collect data in the feature space for each class
         mapped_prototypes = torch.cat(output).numpy()
@@ -388,7 +389,7 @@ class ICarl(AbstractMethod):
         output = []
         for img, tar in pinput:
             img = img.to(self.device)
-            output.append(self.network.forward(img).cpu().detach())
+            output.append(self.network.forward(img)[0].cpu().detach())
 
         # Collect data in the feature space for each class
         mapped_prototypes = torch.cat(output).numpy()  # should be 500 x 64 in CIFAR
@@ -401,7 +402,7 @@ class ICarl(AbstractMethod):
         output = []
         for img, tar in pinput:
             img = img.to(self.device)
-            output.append(self.network.forward(img).cpu().detach())
+            output.append(self.network.forward(img)[0].cpu().detach())
 
         mapped_prototypes_flip = torch.cat(output).numpy()  # should be 500 x 64 in CIFAR
         D2 = mapped_prototypes_flip.T  # now each column is a sample # 64 x 500

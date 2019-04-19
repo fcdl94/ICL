@@ -17,6 +17,7 @@ def create_log_folder(log):
     if not os.path.isdir(log):
         os.makedirs(log)
 
+
 # Instantiate the parser to get ARGUMENTS
 parser = argparse.ArgumentParser(description='Incremental class learning with Domain Adaptation on OfficeHome dataset.')
 
@@ -24,14 +25,14 @@ parser = argparse.ArgumentParser(description='Incremental class learning with Do
 parser.add_argument('setting', default='gtsrb', help='Setting to run (see config.py)')
 parser.add_argument('--root', default='/home/fcdl/dataset/', help='Base directory where are stored the data')
 
-parser.add_argument('--to_run', default=5, type=int, help='Number of last run to test (each run has different order')
+parser.add_argument('--to_run', default=1, type=int, help='Number of last run to test (each run has different order')
 parser.add_argument('--from_run', default=0, type=int, help='Number of first run to test (each run has different order')
 
 # network/training variables
 parser.add_argument('--pretrained', default=None, type=str, help='If start with ImageNet pretraining or not')
 parser.add_argument('--epochs', default=None, type=int, help='The number of epochs to use')
-parser.add_argument('--mem_size', default=100, type=int, help='Target mem size')
-parser.add_argument('--lr', default=2., type=float, help='Initial learning rate')
+parser.add_argument('--mem_size', default=2000, type=int, help='Target mem size')
+parser.add_argument('--lr', default=0.01, type=float, help='Initial learning rate')
 
 # method variables
 parser.add_argument('-m', '--method', default='icarl', help='Method to be tested')

@@ -28,10 +28,16 @@ class SVHN_net(nn.Module):
         self.conv3 = nn.Conv2d(64, 128, kernel_size=5, padding=2)
         self.bn3 = bn(128)
         self.conv3_drop = nn.Dropout2d()
-        self.init_params()
 
-        self.classifier = SVHN_Class_classifier(n_classes)
+        self.fc1 = nn.Linear(128 * 3 * 3, 3072)
+        self.fc2 = nn.Linear(3072, 2048)
+
+        self.fc3 = nn.Linear(2048, n_classes)
+
         self.dom_discr = SVHN_Domain_classifier()
+        self.feat = None
+
+        self.init_params()
 
     def init_params(self):
 
@@ -56,40 +62,26 @@ class SVHN_net(nn.Module):
         self.set_domain(1)
 
     def forward(self, input):
-        input = input.expand(input.data.shape[0], 3, 28, 28)
         x = F.relu(self.bn1(self.conv1(input)))
         x = F.max_pool2d(x, 3, 2)
         x = F.relu(self.bn2(self.conv2(x)))
         x = F.max_pool2d(x, 3, 2)
         x = F.relu(self.bn3(self.conv3(x)))
-        x = self.conv3_drop(x)
+        #x = self.conv3_drop(x)
 
-        return x.view(-1, 128 * 3 * 3)
+        feat = x.view(-1, 128 * 3 * 3)
+
+        logits = F.relu(self.fc1(feat))
+        logits = F.dropout(logits)
+        logits = self.fc2(logits)
+
+        return logits, feat
 
     def predict(self, x):
-        return self.classifier(x)
+        return self.fc3(x)
 
-    def discriminate_domain(self, x, lam):
-        return self.dom_discr(x, lam)
-
-
-class SVHN_Class_classifier(nn.Module):
-
-    def __init__(self, n_classes=10):
-        super(SVHN_Class_classifier, self).__init__()
-        self.fc1 = nn.Linear(128 * 3 * 3, 3072)
-        self.bn1 = nn.BatchNorm1d(3072)
-        self.fc2 = nn.Linear(3072, 2048)
-        self.bn2 = nn.BatchNorm1d(2048)
-        self.fc3 = nn.Linear(2048, n_classes)
-
-    def forward(self, input):
-        logits = F.relu(self.bn1(self.fc1(input)))
-        logits = F.dropout(logits)
-        logits = F.relu(self.bn2(self.fc2(logits)))
-        logits = self.fc3(logits)
-
-        return logits
+    def discriminate_domain(self, feat, lam):
+        return self.dom_discr(feat, lam)
 
 
 class SVHN_Domain_classifier(nn.Module):
@@ -102,15 +94,15 @@ class SVHN_Domain_classifier(nn.Module):
         self.bn2 = nn.BatchNorm1d(1024)
         self.fc3 = nn.Linear(1024, 1)
 
-    def forward(self, input, lam):
-        input = GRL(input, lam)
-        logits = F.relu(self.bn1(self.fc1(input)))
-        logits = F.dropout(logits)
-        logits = F.relu(self.bn2(self.fc2(logits)))
-        logits = F.dropout(logits)
-        logits = self.fc3(logits)
+    def forward(self, feat, lam):
+        x = GRL(feat, lam)
+        x = F.relu(self.bn1(self.fc1(input)))
+        x = F.dropout(x)
+        x = F.relu(self.bn2(self.fc2(x)))
+        x = F.dropout(x)
+        x = self.fc3(x)
 
-        return logits
+        return x
 
 
 class LeNet(nn.Module):
@@ -120,7 +112,10 @@ class LeNet(nn.Module):
         self.conv1 = nn.Conv2d(3, 32, kernel_size=5)
         self.conv2 = nn.Conv2d(32, 48, kernel_size=5)
         self.conv2_drop = nn.Dropout2d()
-        self.fc = Class_classifier()
+
+        self.fc1 = nn.Linear(48 * 4 * 4, 100)
+        self.fc2 = nn.Linear(100, 100)
+        self.fc3 = nn.Linear(100, 10)
         self.dom_discr = Domain_classifier()
 
     def set_domain(self, domain):
@@ -135,35 +130,20 @@ class LeNet(nn.Module):
         self.set_domain(1)
 
     def forward(self, input):
-        input = input.expand(input.data.shape[0], 3, 28, 28)
         x = F.max_pool2d(F.relu(self.conv1(input)), 2)
         x = F.max_pool2d(F.relu(self.conv2_drop(self.conv2(x))), 2)
-        x = x.view(-1, 48 * 4 * 4)
+        feat = x.view(-1, 48*4*4)
 
-        return x
+        logits = F.dropout(F.relu(self.fc1(feat)))
+        logits = self.fc2(logits)
 
-    def predict(self, x):
-        return self.fc(x)
+        return logits, feat
 
-    def discriminate_domain(self, x, lam):
-        return self.dom_discr(x, lam)
+    def predict(self, logits):
+        return self.fc3(logits)
 
-
-class Class_classifier(nn.Module):
-
-    def __init__(self):
-        super(Class_classifier, self).__init__()
-        self.fc1 = nn.Linear(48 * 4 * 4, 100)
-        self.fc2 = nn.Linear(100, 100)
-        self.fc3 = nn.Linear(100, 10)
-
-    def forward(self, input):
-        logits = F.relu(self.fc1(input))
-        logits = self.fc2(F.dropout(logits))
-        logits = F.relu(logits)
-        logits = self.fc3(logits)
-
-        return F.log_softmax(logits, 1)
+    def discriminate_domain(self, feat, lam):
+        return self.dom_discr(feat, lam)
 
 
 class Domain_classifier(nn.Module):
@@ -171,14 +151,15 @@ class Domain_classifier(nn.Module):
     def __init__(self):
         super(Domain_classifier, self).__init__()
         self.fc1 = nn.Linear(48 * 4 * 4, 100)
-        self.fc2 = nn.Linear(100, 2)
+        self.fc2 = nn.Linear(100, 1)
 
     def forward(self, input, constant):
         input = GRL(input, constant)
         logits = F.relu(self.fc1(input))
-        logits = F.log_softmax(self.fc2(logits), 1)
+        logits = self.fc2(logits)
 
         return logits
+
 
 def svhn_net(pretrained=None, num_classes=10):
     return SVHN_net(num_classes)

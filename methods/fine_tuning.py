@@ -16,7 +16,6 @@ if torch.cuda.is_available():
 
 
 class FineTuning(AbstractMethod):
-
     def __init__(self, network, n_classes, n_base, n_incr,
                  log="FT", name="FT", epochs=EPOCHS, factor=LR_FACTOR,
                  lr_init=LR, decay=DECAY, device=DEVICE, **trash):
@@ -121,8 +120,8 @@ class FineTuning(AbstractMethod):
                 inputs = inputs.to(self.device)
                 targets = targets.to(self.device)
 
-                outputs = self.network.forward(inputs)  # feature vector only
-                prediction = self.network.predict(outputs)  # make the prediction
+                logits, feat = self.network.forward(inputs)  # feature vector only
+                prediction = self.network.predict(logits)  # make the prediction
 
                 loss_bx = self.loss(prediction, targets)  # CE loss
                 loss_bx.backward()
@@ -142,8 +141,8 @@ class FineTuning(AbstractMethod):
                 inputs = inputs.to(self.device)
                 targets = targets.to(self.device)
 
-                outputs = self.network.forward(inputs)  # feature vector only
-                prediction = self.network.predict(outputs)  # make the prediction
+                logits, feat = self.network.forward(inputs)  # feature vector only
+                prediction = self.network.predict(logits)  # make the prediction
 
                 loss_bx = self.loss(prediction, targets)  # CE loss
 
@@ -156,14 +155,6 @@ class FineTuning(AbstractMethod):
 
             self.logger.log_training(epoch, train_loss/len(train_loader), train_acc,
                                      valid_loss/len(valid_loader), valid_acc, iteration)
-
-    def predict(self, inputs):
-        inputs = inputs.to(self.device)
-        # compute prediction
-        outputs = self.network.forward(inputs)  # returns embeddings
-        prediction = self.network.predict(outputs).cpu().detach().numpy()  # return score classes as logits
-
-        return prediction.cpu().detach()
 
     def test(self, iteration, cumulative=True, conf_matrix=False):
         data_loader = self.dataset.test_dataloader(iteration, cumulative=cumulative)

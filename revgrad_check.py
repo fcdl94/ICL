@@ -1,28 +1,32 @@
-import torch
 import numpy as np
-import torch.nn as nn
 import torch.optim as optim
 import networks.networks as net
-from networks.gtsrb import GTSRB_net
-from networks.svhn import SVHN_net
+from networks.gtsrb import *
+from networks.svhn import *
 import torchvision as tv
 from torchvision import transforms
 from torch.utils.data import DataLoader
 from data.idadataloader import DoubleDataset
-import torch.nn.functional as F
 from config import get_transform
+from data.mnist_m import MNISTM
+import argparse
+
+parser = argparse.ArgumentParser(description='Sanity Checks Only')
+parser.add_argument('setting', default="SO", help='Setting to run (see config.py)')
+args = parser.parse_args()
+
 
 root = '/home/fcdl/dataset/'
 #target_path = root + "GTSRB/Final_Training/Images"
 #source_path = root + "synthetic_data"
 #test_path = root + "GTSRB/Final_Test"
 
-target_path = root + 'sketchy/photo_train'
-source_path = root + 'sketchy/sketch'
-test_path = root + 'sketchy/photo_test'
+#target_path = root + 'sketchy/photo_train'
+#source_path = root + 'sketchy/sketch'
+#test_path = root + 'sketchy/photo_test'
 
 EPOCHS = 40
-NUM_CLASSES = 125
+NUM_CLASSES = 10
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 const = 1
 
@@ -35,7 +39,6 @@ def train_epoch_single(network, train_loader, optimizer):
     train_correct = 0
     train_total = 0
     batch_idx = 0
-    #scheduler.step()
 
     for batch in train_loader:
 
@@ -46,8 +49,8 @@ def train_epoch_single(network, train_loader, optimizer):
         inputs = inputs.to(device)
         targets = targets.to(device)
 
-        outputs = network.forward(inputs)  # feature vector only
-        prediction = network.predict(outputs)  # make the prediction with sigmoid, making g_y(xi)
+        logits, feat = network.forward(inputs)  # feature vector only
+        prediction = network.predict(logits)  # class scores
 
         loss_bx = src_criterion(prediction, targets)  # CE loss
 
@@ -91,7 +94,6 @@ def train_epoch(network, train_loader, optimizer):
 
         p = float(batch_idx + start_steps) / total_steps
         lam = 2. / (1. + np.exp(-10 * p)) - 1
-        lam = lam
 
         optimizer.zero_grad()
 
@@ -101,9 +103,9 @@ def train_epoch(network, train_loader, optimizer):
         targets = targets.to(device)  # ground truth class scores
         domains = torch.zeros(inputs.shape[0], 1).to(device)  # source is index 0
 
-        outputs = network.forward(inputs)  # feature vector only
-        prediction = network.predict(outputs)  # class scores
-        s_prediction = network.discriminate_domain(outputs, lam)  # domain scores
+        logits, feat = network.forward(inputs)  # feature vector only
+        prediction = network.predict(logits)  # class scores
+        s_prediction = network.discriminate_domain(feat, lam)  # domain score
 
         loss_bx_src = src_criterion(prediction, targets)  # CE loss
         loss_bx_dom_s = dom_criterion(s_prediction, domains)
@@ -121,10 +123,9 @@ def train_epoch(network, train_loader, optimizer):
         inputs, targets = inputs.to(device), targets.to(device) # class gt
         domains = torch.ones(inputs.shape[0], 1).to(device)  # target is index 1
 
-        outputs = network.forward(inputs)  # feature vector only
-        prediction = network.predict(outputs)  # class scores
-        d_prediction = network.discriminate_domain(outputs, lam)  # domain score
-        #print(d_prediction)
+        logits, feat = network.forward(inputs)  # feature vector only
+        prediction = network.predict(logits)  # class scores
+        d_prediction = network.discriminate_domain(feat, lam)  # domain score
 
         loss_bx_tar = src_criterion(prediction, targets)
         loss_bx_dom_t = dom_criterion(d_prediction, domains)
@@ -178,9 +179,9 @@ def valid(network, valid_loader):
             inputs = inputs.to(device)
             targets = targets.to(device)
 
-            outputs = network.forward(inputs)
+            outputs, feats = network.forward(inputs)
             predictions = network.predict(outputs)  # class score
-            domains = network.discriminate_domain(outputs, 0)  # domain score (correct if 1., 0.5 is wanted)
+            domains = network.discriminate_domain(feats, 0)  # domain score (correct if 1., 0.5 is wanted)
 
             loss_bx = criterion(predictions, targets)
 
@@ -202,64 +203,75 @@ def valid(network, valid_loader):
 if __name__ == '__main__':
 
     # define transform
-    # Normalize to have range between -1,1 : (x - 0.5) * 2
-    #transform = transforms.Compose([transforms.Resize((40, 40)),
-    #                                transforms.ToTensor(),
-    #                                transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])])
-    # Create data augmentation transform
-    #augmentation = transforms.Compose([transforms.Resize((35, 35)),
-    #                                   transforms.RandomHorizontalFlip(),
-    #                                   transforms.RandomCrop((32, 32)),
-    #                                   transforms.ToTensor(),
-    #                                   transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])
-    #                                   ])
-
-    transform, augmentation = get_transform('sketchy')
+    transform, augmentation = get_transform('svhn')
     augmentation = transforms.Compose([augmentation, transform])
     print(transform, augmentation)
-    target = tv.datasets.ImageFolder(target_path, transform=augmentation)
-    source = tv.datasets.ImageFolder(source_path, transform=augmentation)
-    test = tv.datasets.ImageFolder(test_path, transform=transform)
+
+    # define dataset
+    #target = tv.datasets.ImageFolder(target_path, transform=augmentation)
+    #source = tv.datasets.ImageFolder(source_path, transform=augmentation)
+    #test = tv.datasets.ImageFolder(test_path, transform=transform)
+
+    source = tv.datasets.SVHN(root, transform=augmentation)
+    target = tv.datasets.MNIST(root, transform=tv.transforms.Compose([tv.transforms.Grayscale(3), transform]))
+    test = tv.datasets.MNIST(root, train=False, transform=tv.transforms.Compose([tv.transforms.Grayscale(3), transform]))
+
+    #source = tv.datasets.MNIST(root, transform=tv.transforms.Compose([tv.transforms.Grayscale(3), transform]))
+    #target = MNISTM(root, transform=transform)
+    #test = MNISTM(root, train=False, transform=transform)
 
     train = DoubleDataset(source, target)
 
-    train_loader = DataLoader(train, 32, True, num_workers=8)
-    #source_loader = DataLoader(source, 128, True, num_workers=8)
-    #target_loader = DataLoader(target, 128, True, num_workers=8)
+    # define dataloader
+    train_loader = DataLoader(train, 128, True, num_workers=8)
+    source_loader = DataLoader(source, 128, True, num_workers=8)
+    target_loader = DataLoader(target, 128, True, num_workers=8)
 
-    test_loader = DataLoader(test, 32, False, num_workers=8)
+    test_loader = DataLoader(test, 128, False, num_workers=8)
 
     # get network
     #net = net.cifar_resnet_revgrad(None, NUM_CLASSES).to(device)
     #net = GTSRB_net(43).to(device)
-    #net = SVHN_net(43).to(device)
+    net = SVHN_net(10).to(device)
     #net = net.wide_resnet_revgrad(None, 125).to(device)
-    net = net.resnet50(True, 125).to(device)
+    #net = net.resnet50(True, 125).to(device)
+    #net = LeNet().to(device)
+
     #optimizer = optim.SGD(net.parameters(), lr=0.1)
     #scheduler = optim.lr_scheduler.MultiStepLR(optimizer, [int(0.7*EPOCHS), int(0.9*EPOCHS)], gamma=0.1)
 
     total_steps = EPOCHS * len(train_loader)
+
+    print("Do a validation before starting to check it is ok...")
+    val_loss, val_acc, dom_acc = valid(net, valid_loader=test_loader)
+    print(f"Epoch {-1:03d} : Test Loss {val_loss:.6f}, Test Acc {val_acc:.2f}, Domain Acc {dom_acc:.2f}")
+    print("Result should be random guessing, i.e. 10% accuracy")
+
     # define training steps
     for epoch in range(EPOCHS):
         # steps
         start_steps = epoch * len(train_loader)
 
         # train epoch
-        learning_rate = 0.01 / ((1 + 10 * (epoch+1)/EPOCHS)**0.75)
+        learning_rate = 0.01 / ((1 + 10 * (epoch)/EPOCHS)**0.75)
         optimizer = optim.SGD(net.parameters(), lr=learning_rate, momentum=0.9)
         # scheduler.step()
+        print(f"Learning rate: {learning_rate}")
 
-        train_loss, train_acc = train_epoch(net, train_loader=train_loader, optimizer=optimizer)
-        # train_loss, train_acc = train_epoch_single(net, train_loader=source_loader, optimizer=optimizer)
+        if args.setting == 'SO':
+            train_loss, train_acc = train_epoch_single(net, train_loader=source_loader, optimizer=optimizer)
+        elif args.setting == 'TO':
+            train_loss, train_acc = train_epoch_single(net, train_loader=target_loader, optimizer=optimizer)
+        else:
+            train_loss, train_acc = train_epoch(net, train_loader=train_loader, optimizer=optimizer)
 
         # valid!
         val_loss, val_acc, dom_acc = valid(net, valid_loader=test_loader)
 
         print(f"\nEpoch {epoch+1:03d} : Test Loss {val_loss:.6f}, Test Acc {val_acc:.2f}, Domain Acc {dom_acc:.2f}\n")
 
-    #torch.save({
-    #    "network": net
-    #}, "models/cifar_resnet_rev_grad_ce_target.pth")
+        if train_loss < 1e-4:
+            break
 
     print(".... END")
 

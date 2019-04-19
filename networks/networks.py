@@ -101,7 +101,7 @@ class ResNet(nn.Module):
         x = self.avgpool(x)
         x = x.view(x.size(0), -1)
 
-        return x
+        return x, x  # here logits and feats are the same! (we classify on only one FC)
 
     def predict(self, x):
         x = self.fc(x)
@@ -212,7 +212,7 @@ class CifarResNet(nn.Module):
         x = self.avgpool(x)
         x = x.view(x.size(0), -1)
 
-        return x
+        return x, x  # here logits and feats are the same! (we classify on only one FC)
 
     def predict(self, x):
         out = self.linear(x)
@@ -304,7 +304,7 @@ class WideResNet(nn.Module):
         x = self.avgpool(x)
         x = x.view(x.size(0), -1)
 
-        return x
+        return x, x  # here logits and feats are the same! (we classify on only one FC)
 
     def predict(self, x):
         return self.fc(x)
