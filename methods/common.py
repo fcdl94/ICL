@@ -1,6 +1,6 @@
 import os
 from abc import ABC, abstractmethod
-from .logger import VisdomLogger
+from .logger import TensorboardXLogger
 import logging
 
 
@@ -60,7 +60,7 @@ class AbstractMethod(ABC):
 
         self.log_folder = log
         create_log_folder(log)
-        self.logger = VisdomLogger(self.log_folder, name)
+        self.logger = TensorboardXLogger(self.log_folder, name)
 
         logging.debug(f"Starting the method {name}")
         self.name = name
