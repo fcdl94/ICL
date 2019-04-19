@@ -2,6 +2,7 @@ from .icarl_da import ICarlDA
 import torch
 import torch.nn as nn
 import numpy as np
+import logging
 
 
 class ICarlRG(ICarlDA):
@@ -25,18 +26,21 @@ class ICarlRG(ICarlDA):
 
         if iteration == 0 or not self.protos:  # if I DON'T use protos (I don't use them in first iteration as well)
             self.lam = 0
+            const = self.constant
+            self.constant = 0
             self.network.set_target()
             for batch in train_loader:
                 optimizer.zero_grad()
 
-                loss_bx, trt_tot, trt_crc = self._compute_loss(batch, iteration)
+                loss, trt_tot, trt_crc, loss_cl = self._compute_loss(batch, iteration)
 
-                loss_bx.backward()
+                loss.backward()
                 optimizer.step()
                 # update stats
-                train_loss += loss_bx.item()
+                train_loss += loss_cl.item()
                 train_total += trt_tot
                 train_correct += trt_crc
+            self.constant = const
         else:  # if I USE protos
             batch_idx = 0
             for source_loader, target_loader in train_loader:
@@ -48,21 +52,22 @@ class ICarlRG(ICarlDA):
 
                 # train the source
                 self.network.set_source()
-                loss_bx_src, tr_tot, tr_crc = self._compute_loss(source_loader, iteration, target=False)
+                loss_bx_src, tr_tot, tr_crc, loss_cl = self._compute_loss(source_loader, iteration, target=False)
                 train_total += tr_tot
                 train_correct += tr_crc
+                train_loss += loss_cl.item()
 
                 # train the target
                 self.network.set_target()
-                loss_bx_tar, tr_tot, tr_crc = self._compute_loss(target_loader, iteration)
+                loss_bx_tar, tr_tot, tr_crc, loss_cl = self._compute_loss(target_loader, iteration)
                 train_total += tr_tot
                 train_correct += tr_crc
+                train_loss += loss_cl.item()
 
                 loss_bx = loss_bx_src + loss_bx_tar
                 loss_bx.backward()
                 optimizer.step()
 
-                train_loss += loss_bx.item()
                 batch_idx += 1
 
         # make validation
@@ -95,6 +100,9 @@ class ICarlRG(ICarlDA):
         # normalize and print stats
         train_acc = 100. * train_correct / train_total
         test_acc = 100. * test_correct / test_total
+
+        test_loss /= len(valid_loader)
+        train_loss /= len(train_loader)
 
         return train_loss, train_acc, test_loss, test_acc
 
@@ -136,10 +144,10 @@ class ICarlRG(ICarlDA):
             domain_acc = 1 - domain_acc
 
         total_loss = loss_bx + self.constant * loss_dm
-        if self.count == 250:
-            print(f"Lam {self.lam} --- Class Loss {loss_bx:.4f} "
-                  f"--- Domain Loss {loss_dm} --- {'TarDom' if target else 'SrcDom'} Acc {domain_acc:.3f}")
-            self.count = 0
+        if self.count == 200 or self.count == 0:
+            logging.info(f"Lam {self.lam:.4f} --- Class Loss {loss_bx:.4f} "
+                         f"--- Domain Loss {loss_dm:4f} --- {'TarDom' if target else 'SrcDom'} Acc {domain_acc:.3f}")
+            self.count = -1
         self.count += 1
 
-        return total_loss, train_total, train_correct
+        return total_loss, train_total, train_correct, loss_bx
