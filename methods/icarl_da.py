@@ -317,7 +317,7 @@ class ICarlDA(AbstractMethod):
 
             if class_means is not None:  # if we are using the means compute and use ICaRL
                 # Compute score for iCaRL
-                sqd = cdist(class_means[:, :, 0].T, outputs, 'sqeuclidean')  # Squared euclidean distance
+                sqd = cdist(class_means[:, :, 0].numpy().T, outputs, 'sqeuclidean')  # Squared euclidean distance
                 score_icarl = (-sqd).T
                 # Compute score for iCaRL-Inverted
                 #if INVERTED:
@@ -446,7 +446,8 @@ class ICarlDA(AbstractMethod):
     # MEAN SECTION
     def compute_means(self, iteration):
 
-        class_means = np.zeros((self.features, self.n_classes, 3))
+        class_means = torch.zeros((self.features, self.n_classes, 3))
+
         nb_protos_cl_target = self.mem_size_target // self.nb_base  # num of exemplars per base class
 
         if iteration == 0:
@@ -499,8 +500,8 @@ class ICarlDA(AbstractMethod):
         # iCaRL
         alph = self.alpha_dr_herding[cl].to(self.device)  # importance of each image of this class
         # dict_size = len(self.alpha_dr_herding[cl])
-        alph = (alph > 0) * (alph < nb_protos_cl + 1) * 1.  # 1 if in the current herd
-
+        alph = ((alph > 0) * (alph < nb_protos_cl + 1) * 1.).float()  # 1 if in the current herd
+        
         # Handle the case in which there are no prototypes
         s = torch.sum(alph)
         if s == 0:
