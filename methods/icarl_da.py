@@ -425,7 +425,7 @@ class ICarlDA(AbstractMethod):
         # Herding algorithm
         while not (iter_herding == min(nb_protos_cl, mapped_prototypes.shape[0])) \
                 and iter_herding_eff < 10000:
-            tmp_t = torch.dot(w_t, D)
+            tmp_t = w_t.matmul(D)
             ind_max = torch.argmax(tmp_t)
             iter_herding_eff += 1
             if self.alpha_dr_herding[cl][ind_max] == 0:
