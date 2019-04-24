@@ -507,7 +507,7 @@ class ICarlDA(AbstractMethod):
             s = 1
 
         alph = alph / s  # to make the average only for the current prototypes.
-        class_means[:, cl, 0] = (torch.dot(D, alph))
+        class_means[:, cl, 0] = (torch.matmul(D, alph))
         # dot operation is for weighting each f(xi) with alpha
         class_means[:, cl, 0] /= torch.norm(class_means[:, cl, 0], p=2, dim=0)
         class_means[:, cl, 0] = class_means[:, cl, 0].cpu()
