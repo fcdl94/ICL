@@ -16,7 +16,7 @@ MEM_SIZE = 20 * 5
 DECAY = 0.00001
 EPOCHS = 70
 LR_FACTOR = 5.
-METHODS = ["iCaRL", "Hybrid", "NCM"]
+METHODS = ["iCaRL", "Hybrid"]
 
 DEVICE = 'cpu'
 if torch.cuda.is_available():
@@ -55,7 +55,7 @@ class ICarlDA(AbstractMethod):
         self.prototypes_target = None  # list of target PIL images
         self.prototypes_source = None  # list of source PIL images
 
-        self.alpha_dr_herding = [np.array([0]) for _ in range(n_classes)]
+        self.alpha_dr_herding = [torch.tensor([0]) for _ in range(n_classes)]
 
         # training parameters
         self.features = features
@@ -137,7 +137,7 @@ class ICarlDA(AbstractMethod):
 
     # TRAIN ON ONE CLASS BATCH
     def incremental_fit(self, iteration, train_loader, valid_loader):
-        new_lr = self.lr_init
+        # new_lr = self.lr_init
         # define optimizer SGD
         #optimizer = optim.SGD(filter(lambda p: p.requires_grad, self.network.parameters()), lr=new_lr, momentum=0.9,
         #                      weight_decay=self.decay, nesterov=False)
@@ -308,9 +308,9 @@ class ICarlDA(AbstractMethod):
             # compute prediction
             logits, feats = self.network.forward(inputs)  # returns embeddings
             pred = self.network.predict(logits).cpu().detach().numpy()  # return score classes as logits
-            outputs = logits.cpu().detach().numpy()
+            outputs = logits.detach()
 
-            outputs = (outputs.T / np.linalg.norm(outputs.T, axis=0)).T  # normalize output
+            outputs = (outputs.t() / torch.norm(outputs.t(), p=2, dim=0)).t().cpu().numpy()  # normalize output
 
             # Compute the accuracy over the batch
             targets_prep = targets_prep.numpy()
@@ -320,19 +320,19 @@ class ICarlDA(AbstractMethod):
                 sqd = cdist(class_means[:, :, 0].T, outputs, 'sqeuclidean')  # Squared euclidean distance
                 score_icarl = (-sqd).T
                 # Compute score for iCaRL-Inverted
-                if INVERTED:
-                    sqd = cdist(class_means[:, :, 2].T, outputs, 'sqeuclidean')  # Squared euclidean distance
-                    score_icarl_inv = (-sqd).T
+                #if INVERTED:
+                #   sqd = cdist(class_means[:, :, 2].T, outputs, 'sqeuclidean')  # Squared euclidean distance
+                #    score_icarl_inv = (-sqd).T
                 # Compute score for NCM
-                sqd = cdist(class_means[:, :, 1].T, outputs, 'sqeuclidean')  # Squared euclidean distance
-                score_ncm = (-sqd).T
+                #sqd = cdist(class_means[:, :, 1].T, outputs, 'sqeuclidean')  # Squared euclidean distance
+                #score_ncm = (-sqd).T
 
                 stat_icarl += ([ll in best for ll, best in zip(targets_prep, np.argsort(score_icarl, axis=1)[:, -1:])])
-                stat_ncm += ([ll in best for ll, best in zip(targets_prep, np.argsort(score_ncm, axis=1)[:, -1:])])
+                #stat_ncm += ([ll in best for ll, best in zip(targets_prep, np.argsort(score_ncm, axis=1)[:, -1:])])
                 target_pred += [i.item() for i in np.argsort(score_icarl, axis=1)[:, -1:]]
-                if INVERTED:
-                    stat_icarl_i += (
-                        [ll in best for ll, best in zip(targets_prep, np.argsort(score_icarl_inv, axis=1)[:, -1:])])
+                #if INVERTED:
+                #    stat_icarl_i += (
+                #        [ll in best for ll, best in zip(targets_prep, np.argsort(score_icarl_inv, axis=1)[:, -1:])])
             else:  # otherwise use H1 (special case to handle LwF)
                 target_pred += [i.item() for i in np.argsort(pred, axis=1)[:, -1:]]
 
@@ -343,8 +343,8 @@ class ICarlDA(AbstractMethod):
         # use the logits
         top1_acc_list[0] = np.average(stat_icarl) * 100. if class_means is not None else 0.     # ICarl
         top1_acc_list[1] = np.average(stat_hb1) * 100.                                          # Hybrid 1
-        top1_acc_list[2] = np.average(stat_ncm) * 100. if class_means is not None else 0.       # NCM
-        top1_acc_list[3] = np.average(stat_icarl_i) * 100. if (class_means is not None and INVERTED) else 0. # ICaRL inv
+        #top1_acc_list[2] = np.average(stat_ncm) * 100. if class_means is not None else 0.       # NCM
+        #top1_acc_list[3] = np.average(stat_icarl_i) * 100. if (class_means is not None and INVERTED) else 0. # ICaRL inv
         # print confusion matrix
         if conf_matrix:
             self.logger.confusion_matrix(self.reorder_target(target_total),
@@ -407,26 +407,26 @@ class ICarlDA(AbstractMethod):
         output = []
         for img, tar in pinput:
             img = img.to(self.device)
-            output.append(self.network.forward(img)[0].cpu().detach())
+            output.append(self.network.forward(img)[0].detach())
 
         # Collect data in the feature space for each class
-        #TODO DO THIS IN GPU
-        mapped_prototypes = torch.cat(output).numpy()
-        D = mapped_prototypes.T
-        D = D / np.linalg.norm(D, axis=0)
+        # do this using gpu!
+        mapped_prototypes = torch.cat(output)
+        D = mapped_prototypes.t()
+        D = D / torch.norm(D, p=2, dim=0)
         # Herding procedure : ranking of the potential exemplars
-        mu = np.mean(D, axis=1)
+        mu = torch.mean(D, dim=1)
 
         # set exemplar to zero
-        self.alpha_dr_herding[cl] = np.zeros(mapped_prototypes.shape[0])  # number of rows
-        w_t = mu
+        self.alpha_dr_herding[cl] = torch.zeros(mapped_prototypes.shape[0])  # number of rows
+        w_t = mu.to(self.device)
         iter_herding = 0
         iter_herding_eff = 0
         # Herding algorithm
         while not (iter_herding == min(nb_protos_cl, mapped_prototypes.shape[0])) \
                 and iter_herding_eff < 10000:
-            tmp_t = np.dot(w_t, D)
-            ind_max = np.argmax(tmp_t)
+            tmp_t = torch.dot(w_t, D)
+            ind_max = torch.argmax(tmp_t)
             iter_herding_eff += 1
             if self.alpha_dr_herding[cl][ind_max] == 0:
                 self.alpha_dr_herding[cl][ind_max] = 1 + iter_herding
@@ -475,53 +475,55 @@ class ICarlDA(AbstractMethod):
         output = []
         for img, tar in pinput:
             img = img.to(self.device)
-            output.append(self.network.forward(img)[0].cpu().detach())
+            output.append(self.network.forward(img)[0].detach())
 
         # Collect data in the feature space for each class
-        mapped_prototypes = torch.cat(output).numpy()  # should be 500 x 64 in CIFAR
-        # todo implement this in PyTorch using GPU!
-        D = mapped_prototypes.T  # now each column is a sample # 64 x 500
-        D = D / np.linalg.norm(D, axis=0)  # 64 x 500
+        mapped_prototypes = torch.cat(output)  # should be n_images_for_cl (not fixed) x n_features in CIFAR
+        # implemented this in PyTorch using GPU!
+        D = mapped_prototypes.t()  # now each column is a sample # n_feat x n_img_cl
+        D = D / torch.norm(D, p=2, dim=0)  # 64 x 500
 
-        if INVERTED:
-            # compute network resposes for images of class cl for flipped images
-            flip = transforms.RandomHorizontalFlip(p=1)
-            pinput = self.dataset.get_dataloader_of_class(cl, flip)
-            output = []
-            for img, tar in pinput:
-                img = img.to(self.device)
-                output.append(self.network.forward(img)[0].cpu().detach())
+        #if INVERTED:
+        #    # compute network resposes for images of class cl for flipped images
+        #    flip = transforms.RandomHorizontalFlip(p=1)
+        #    pinput = self.dataset.get_dataloader_of_class(cl, flip)
+        #    output = []
+        #    for img, tar in pinput:
+        #        img = img.to(self.device)
+        #        output.append(self.network.forward(img)[0].detach())
 
-            mapped_prototypes_flip = torch.cat(output).numpy()  # should be 500 x 64 in CIFAR
-            D2 = mapped_prototypes_flip.T  # now each column is a sample # 64 x 500
-            D2 = D2 / np.linalg.norm(D2, axis=0)  # 64 x 500
+        #    mapped_prototypes_flip = torch.cat(output)  # should be 500 x 64 in CIFAR
+        #    D2 = mapped_prototypes_flip.t()  # now each column is a sample # 64 x 500
+        #    D2 = D2 / torch.norm(D2, p=2, dim=0)  # 64 x 500
 
         # iCaRL
-        alph = self.alpha_dr_herding[cl]  # importance of each image of this class
-        dict_size = len(self.alpha_dr_herding[cl])
+        alph = self.alpha_dr_herding[cl].to(self.device)  # importance of each image of this class
+        # dict_size = len(self.alpha_dr_herding[cl])
         alph = (alph > 0) * (alph < nb_protos_cl + 1) * 1.  # 1 if in the current herd
 
         # Handle the case in which there are no prototypes
-        s = np.sum(alph)
+        s = torch.sum(alph)
         if s == 0:
             s = 1
 
         alph = alph / s  # to make the average only for the current prototypes.
-        class_means[:, cl, 0] = (np.dot(D, alph))
+        class_means[:, cl, 0] = (torch.dot(D, alph))
         # dot operation is for weighting each f(xi) with alpha
-        class_means[:, cl, 0] /= np.linalg.norm(class_means[:, cl, 0])
+        class_means[:, cl, 0] /= torch.norm(class_means[:, cl, 0], p=2, dim=0)
+        class_means[:, cl, 0] = class_means[:, cl, 0].cpu()
 
         # Inverted ICaRL
-        if INVERTED:
-            class_means[:, cl, 2] = (np.dot(D, alph) + np.dot(D2, alph)) / 2
-            # dot operation is for weighting each f(xi) with alpha
-            class_means[:, cl, 2] /= np.linalg.norm(class_means[:, cl, 2])
+        #if INVERTED:
+        #    class_means[:, cl, 2] = (torch.dot(D, alph) + torch.dot(D2, alph)) / 2
+        #    # dot operation is for weighting each f(xi) with alpha
+        #    class_means[:, cl, 2] /= torch.norm(class_means[:, cl, 2], p=2, dim=0)
+        #    class_means[:, cl, 2] = class_means[:, cl, 2].cpu()
 
-        # Normal NCM
-        alph = np.ones(dict_size) / dict_size  # to make the avg over all samples
-        class_means[:, cl, 1] = (np.dot(D, alph))
-        # dot operation is for weighting each f(xi) with alpha
-        class_means[:, cl, 1] /= np.linalg.norm(class_means[:, cl, 1])
+        ## Normal NCM
+        #alph = np.ones(dict_size) / dict_size  # to make the avg over all samples
+        #class_means[:, cl, 1] = (torch.dot(D, alph))
+        ## dot operation is for weighting each f(xi) with alpha
+        #class_means[:, cl, 1] /= torch.norm(class_means[:, cl, 1])
 
     # UTILS
     def compute_num_classes(self, iteration):
