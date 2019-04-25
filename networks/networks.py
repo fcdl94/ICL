@@ -113,6 +113,17 @@ class ResNet(nn.Module):
         x = self.domain_discriminator(x)
         return x
 
+    def set_domain(self, domain):
+        for mod in self.modules():
+            if isinstance(mod, DAL):
+                mod.set_domain(domain)
+
+    def set_source(self):
+        self.set_domain(0)
+
+    def set_target(self):
+        self.set_domain(1)
+
 
 class CifarResNet(nn.Module):
     """
