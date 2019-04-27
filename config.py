@@ -134,7 +134,7 @@ config = {
     ############# Sketchy ####################
     'sketchy-ph': {
         'n_classes': 125,
-        'n_features': 512,
+        'n_features': 2048,
         'data_conf': {
             'target': sk_ph_train,
             'test': sk_ph_test,
@@ -149,7 +149,7 @@ config = {
     },  # traditional setting, no DA, no ICL, on Photo
     'isketchy-ph': {
         'n_classes': 125,
-        'n_features': 512,
+        'n_features': 2048,
         'data_conf': {
             'target': sk_ph_train,
             'test': sk_ph_test,
@@ -164,7 +164,7 @@ config = {
     },  # ICL setting on photo (50 - 3*25)
     'sketchy-sk': {
         'n_classes': 125,
-        'n_features': 512,
+        'n_features': 2048,
         'data_conf': {
             'target': sk_sk_train,
             'test': sk_sk_test,
@@ -179,7 +179,7 @@ config = {
     },  # traditional setting, no DA, no ICL, on Sketch
     'isketchy-sk': {
         'n_classes': 125,
-        'n_features': 512,
+        'n_features': 2048,
         'data_conf': {
             'target': sk_sk_train,
             'test': sk_sk_test,
@@ -194,7 +194,7 @@ config = {
     },  # ICL setting on Sketch (50 - 3*25)
     'sketchy-sk-to-ph': {
         'n_classes': 125,
-        'n_features': 512,
+        'n_features': 2048,
         'data_conf': {
             'target': sk_sk_full,
             'test': sk_ph_test,
@@ -209,7 +209,7 @@ config = {
     },  # full DA setting Sketch -> Photo
     'isketchy-sk-to-ph': {
         'n_classes': 125,
-        'n_features': 512,
+        'n_features': 2048,
         'data_conf': {
             'target': sk_ph_train,
             'source': sk_sk_full,
@@ -225,7 +225,7 @@ config = {
     },  # ICL+DA Sketch -> Photo (50 - 3*25)
     'sketchy-ph-to-sk': {
         'n_classes': 125,
-        'n_features': 512,
+        'n_features': 2048,
         'data_conf': {
             'target': sk_ph_full,
             'test': sk_sk_test,
@@ -240,7 +240,7 @@ config = {
     },   # full DA setting Photo -> Sketch
     'isketchy-ph-to-sk': {
         'n_classes': 125,
-        'n_features': 512,
+        'n_features': 2048,
         'data_conf': {
             'target': sk_sk_train,
             'source': sk_ph_full,
@@ -315,7 +315,7 @@ config = {
     ## IMAGENET CALTECH ##
     'imagenet-caltech': {
         'n_classes': 84,
-        'n_features': 512,
+        'n_features': 2048,
         'data_conf': {
             'target': imagenet_train,
             'test': imagenet_test,
@@ -331,7 +331,7 @@ config = {
     },
     'caltech-imagenet': {
         'n_classes': 84,
-        'n_features': 512,
+        'n_features': 2048,
         'data_conf': {
             'target': caltech_train,
             'test': caltech_test,
