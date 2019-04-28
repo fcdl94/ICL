@@ -44,6 +44,8 @@ class IDADataloader:
         assert transform is not None, "You should pass a transform to transform Image into Tensor"
 
         target, source, test = self.make_datasets(root, target, source, test, transform)
+        
+
 
         # Creating data indices for target training and validation splits:
         target_train_indices, target_val_indices = \
@@ -114,6 +116,9 @@ class IDADataloader:
         target = ImageFolder(os.path.join(root, target), None, None)
         source = ImageFolder(os.path.join(root, source), None, None)
         test = ImageFolder(os.path.join(root, test), transform)
+        target.targets = [s[1] for s in target.samples] 
+        test.targets = [s[1] for s in test.samples]
+        source.targets = [s[1] for s in source.samples]
         return target, source, test
 
     @property
