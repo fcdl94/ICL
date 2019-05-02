@@ -16,6 +16,8 @@ class ICarlRG(ICarlDA):
 
     def observe(self, epoch, iteration, train_loader, valid_loader, optimizer):
         self.network.train()
+        self.network2.eval()
+
         train_loss = 0
         train_correct = 0
         train_total = 0

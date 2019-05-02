@@ -127,8 +127,6 @@ class ICarl(AbstractMethod):
 
         return acc_dict
 
-        return cumulative_accuracies
-
     # TRAIN ON ONE CLASS BATCH
     def incremental_fit(self, iteration, train_loader, valid_loader):
         new_lr = self.lr_init
