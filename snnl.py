@@ -25,6 +25,10 @@ import argparse
 
 parser = argparse.ArgumentParser()
 parser.add_argument('name', default="snnl_", help='The name of experiment')
+parser.add_argument('-D', default=-1, type=float)
+parser.add_argument('-T', default=1, type=float)
+
+
 args = parser.parse_args()
 
 # parameters and utils
@@ -387,11 +391,11 @@ if __name__=='__main__':
         # scheduler.step()
         print(f"Learning rate: {learning_rate}")
 
-        T_d = nn.Parameter(torch.FloatTensor([1]))
-        T_c = nn.Parameter(torch.FloatTensor([1]))
+        T_d = nn.Parameter(torch.FloatTensor([args.T]))
+        T_c = nn.Parameter(torch.FloatTensor([args.T]))
 
         train_loss, train_acc = train_epoch_snnl(net, train_loader=train_loader, optimizer=optimizer, T_d=T_d, T_c=T_c,
-                                                 ALPHA_Y=0, ALPHA_D=-1)
+                                                 ALPHA_Y=0, ALPHA_D=args.D)
         # train_loss, train_acc = train_epoch_single(net, train_loader=train_loader, optimizer=optimizer)
 
         # valid!
