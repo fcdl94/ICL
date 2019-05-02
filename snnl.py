@@ -14,19 +14,23 @@ import torch.optim as optim
 import torchvision as tv
 from torchvision import transforms
 import numpy as np
-import matplotlib
 import matplotlib.pyplot as plt
-
-from sklearn.manifold import TSNE
 
 from data import MNISTM
 from data import DoubleDataset
 from data.common import get_index_of_classes
 from networks.svhn import lenet_net
 
+import argparse
+
+parser = argparse.ArgumentParser()
+parser.add_argument('name', default="snnl_", help='The name of experiment')
+args = parser.parse_args()
+
 # parameters and utils
 device = 'cuda'
 ROOT = '/home/fcdl/dataset/'
+
 
 # SNNLoss definition
 class SNNLoss(nn.Module):
@@ -383,8 +387,8 @@ if __name__=='__main__':
         # scheduler.step()
         print(f"Learning rate: {learning_rate}")
 
-        T_d = nn.Parameter(torch.FloatTensor([10]))
-        T_c = nn.Parameter(torch.FloatTensor([10]))
+        T_d = nn.Parameter(torch.FloatTensor([1]))
+        T_c = nn.Parameter(torch.FloatTensor([1]))
 
         train_loss, train_acc = train_epoch_snnl(net, train_loader=train_loader, optimizer=optimizer, T_d=T_d, T_c=T_c,
                                                  ALPHA_Y=0, ALPHA_D=-1)
@@ -397,4 +401,4 @@ if __name__=='__main__':
         if train_loss < 1e-4:
             break
 
-    torch.save(net.state_dict(), 'lenet_snnl_2.pth')
+    torch.save(net.state_dict(), args.name)
