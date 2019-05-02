@@ -218,6 +218,8 @@ def train_epoch_snnl(network, train_loader, optimizer, T_d, T_c, ALPHA_Y=1, ALPH
 
     network.train()
     train_loss = 0
+    class_snnl_loss_cum = 0
+    domain_snnl_loss_cum = 0
     train_correct = 0
     train_total = 0
     train_total_src = 0
@@ -281,6 +283,8 @@ def train_epoch_snnl(network, train_loader, optimizer, T_d, T_c, ALPHA_Y=1, ALPH
 
         # compute statistics
         train_loss += loss_cl.item()
+        class_snnl_loss_cum += class_snnl_loss.item()
+        domain_snnl_loss_cum += domain_snnl_loss.item()
         train_total += tr_tot
         train_correct += tr_crc
 
@@ -290,7 +294,9 @@ def train_epoch_snnl(network, train_loader, optimizer, T_d, T_c, ALPHA_Y=1, ALPH
                   f"Source Loss: {loss_bx_src:.6f} "
                   f"Source Acc : {100.0 * train_correct_src / train_total_src:.2f} "
                   f"Target Loss: {loss_bx_tar:.6f} "
-                  f"Target Acc : {100.0 * train_correct / train_total:.2f} "
+                  f"Target Acc : {100.0 * train_correct / train_total:.2f}\n\t "
+                  f"Class loss: {class_snnl_loss_cum / (2*train_total)} "
+                  f"Domain loss: {domain_snnl_loss_cum / (2*train_total)} "
                   )
 
     train_acc = 100. * train_correct / train_total
@@ -322,14 +328,14 @@ def valid(network, valid_loader):
             test_total += targets.size(0)
             test_correct += predicted.eq(targets).sum().item()
 
-            # domain_acc += torch.sigmoid(domains.cpu().detach()).sum().item()
+            domain_acc += torch.sigmoid(domains.cpu().detach()).sum().item()
 
     # normalize and print stats
     test_acc = 100. * test_correct / test_total
     domain_acc = 100. * domain_acc / test_total
     test_loss /= len(valid_loader)
 
-    return test_loss, test_acc, 0
+    return test_loss, test_acc, domain_acc
 
 
 if __name__=='__main__':
