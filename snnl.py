@@ -41,27 +41,29 @@ class SNNLoss(nn.Module):
     def __init__(self, eps=1e-6):
         super().__init__()
         self.eps = eps
-        
+
     def forward(self, x, y, T=1):  # x 2-D matrix of BxF, y 1-D vector of B
         b = len(y)
-        
+
         xn = x.norm(p=2, dim=1).pow(2)
         xn_t = xn.unsqueeze(0).t()
 
-        xxT = torch.mm(x, x.permute(1,0))
+        xxT = torch.mm(x, x.permute(1, 0))
 
-        dist = xn + xn_t - 2*xxT + self.eps
+        dist = xn + xn_t - 2 * xxT + self.eps
 
         # make diagonal mask
         m_den = -torch.eye(b) + 1
+        m_den = m_den.to(x.device)
 
         # make per class mask
-        m_num = (y == y.unsqueeze(0).t()).type(torch.int) - torch.eye(b, dtype=torch.int)
-              
-        num = torch.sum(m_num.float() * torch.exp( -(dist) * T), dim=1)
-        den = torch.sum(m_den.float() * torch.exp( -(dist) * T), dim=1)
+        m_num = (y == y.unsqueeze(0).t()).type(torch.int) - torch.eye(b, dtype=torch.int).to(y.device)
+        m_num = m_num.to(x.device)
 
-        return -torch.log(num/den).mean()
+        num = torch.sum(m_num.float() * torch.exp(-(dist) * T), dim=1) + self.eps
+        den = torch.sum(m_den.float() * torch.exp(-(dist) * T), dim=1) + self.eps
+
+        return - torch.log(num / den).mean()
 
 
 def print_tsne(X,y):
@@ -331,7 +333,6 @@ def valid(network, valid_loader):
 
 
 if __name__=='__main__':
-    # Make the dataset
     # Make the dataset
     transform = tv.transforms.Compose([transforms.Resize((28, 28)),
                                        transforms.ToTensor(),
