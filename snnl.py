@@ -60,8 +60,8 @@ class SNNLoss(nn.Module):
         m_num = (y == y.unsqueeze(0).t()).type(torch.int) - torch.eye(b, dtype=torch.int).to(y.device)
         m_num = m_num.to(x.device)
 
-        num = torch.sum(m_num.float() * torch.exp(-(dist) * T), dim=1) + self.eps
-        den = torch.sum(m_den.float() * torch.exp(-(dist) * T), dim=1) + self.eps
+        num = torch.sum(m_num.float() * torch.exp(-(dist) * T), dim=1)
+        den = torch.sum(m_den.float() * torch.exp(-(dist) * T), dim=1)
 
         return - torch.log(num / den).mean()
 
@@ -295,8 +295,8 @@ def train_epoch_snnl(network, train_loader, optimizer, T_d, T_c, ALPHA_Y=1, ALPH
                   f"Source Acc : {100.0 * train_correct_src / train_total_src:.2f} "
                   f"Target Loss: {loss_bx_tar:.6f} "
                   f"Target Acc : {100.0 * train_correct / train_total:.2f}\n\t "
-                  f"Class loss: {class_snnl_loss_cum / (2*train_total)} "
-                  f"Domain loss: {domain_snnl_loss_cum / (2*train_total)} "
+                  f"Class loss: {class_snnl_loss_cum / (2*train_total):.6f} "
+                  f"Domain loss: {domain_snnl_loss_cum / (2*train_total):.6f} "
                   )
 
     train_acc = 100. * train_correct / train_total
