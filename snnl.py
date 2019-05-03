@@ -26,7 +26,7 @@ import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument('name', default="snnl_", help='The name of experiment')
 parser.add_argument('-D', default=-1, type=float)
-parser.add_argument('-T', default=1, type=float)
+parser.add_argument('-Y', default=1, type=float)
 
 
 args = parser.parse_args()
@@ -307,23 +307,27 @@ def train_epoch_snnl(network, train_loader, optimizer, t_optim, T_d, T_c, ALPHA_
         targets = torch.cat((targets_s, targets_t), 0)
         domains = torch.cat((domain_s, domain_t), 0)
 
-        # class_snnl_loss = snnl(feats.reshape(feats.shape[0], -1), targets, T_c)
+        class_snnl_loss = snnl(feats.reshape(feats.shape[0], -1), targets, T_c)
         domain_snnl_loss = snnl(feats.reshape(feats.shape[0], -1), domains, T_d)
 
-        loss = loss_cl + ALPHA_D * domain_snnl_loss  # + ALPHA_Y * class_snnl_loss
+        loss = loss_cl + ALPHA_D * domain_snnl_loss + ALPHA_Y * class_snnl_loss
 
         loss.backward()
         optimizer.step()
 
         t_optim.zero_grad()
-        # class_snnl_loss = snnl(feats.reshape(feats.shape[0], -1), targets, T_c)
+        class_snnl_loss = snnl(feats.reshape(feats.shape[0], -1), targets, T_c)
+        class_snnl_loss.backward()
+        t_optim.step()
+
+        t_optim.zero_grad()
         domain_snnl_loss = snnl(feats.detach().reshape(feats.shape[0], -1), domains, T_d)
         domain_snnl_loss.backward()
         t_optim.step()
 
         # compute statistics
         train_loss += loss_cl.item()
-        # class_snnl_loss_cum += class_snnl_loss.item()
+        class_snnl_loss_cum += class_snnl_loss.item()
         domain_snnl_loss_cum += domain_snnl_loss.item()
         train_total += tr_tot
         train_correct += tr_crc
@@ -335,7 +339,7 @@ def train_epoch_snnl(network, train_loader, optimizer, t_optim, T_d, T_c, ALPHA_
                   f"Source Acc : {100.0 * train_correct_src / train_total:.2f} "
                   f"Target Loss: {loss_bx_tar:.6f} "
                   f"Target Acc : {100.0 * train_correct / train_total:.2f}\n\t "
-                  #          f"Class loss: {class_snnl_loss_cum / batch_idx:.6f} "
+                  f"Class loss: {class_snnl_loss_cum / batch_idx:.6f} "
                   f"Domain loss: {domain_snnl_loss_cum / batch_idx:.6f} "
                   f"Td: {T_d.item():.6f}")
 
@@ -480,7 +484,7 @@ if __name__=='__main__':
         # minimize_T(net, train_loader, t_optim, T_d)
 
         train_loss, train_acc = train_epoch_snnl(net, train_loader=train_loader, optimizer=optimizer,
-                                                 t_optim=t_optim, T_d=T_d, T_c=T_c, ALPHA_Y=0., ALPHA_D=-0.1)
+                                                 t_optim=t_optim, T_d=T_d, T_c=T_c, ALPHA_Y=args.Y, ALPHA_D=args.D)
         #train_loss, train_acc = train_epoch_dann(net, train_loader=train_loader, optimizer=optimizer)
 
         # valid!
