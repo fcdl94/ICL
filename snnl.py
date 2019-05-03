@@ -316,7 +316,7 @@ def train_epoch_snnl(network, train_loader, optimizer, t_optim, T_d, T_c, ALPHA_
         optimizer.step()
 
         t_optim.zero_grad()
-        class_snnl_loss = snnl(feats.reshape(feats.shape[0], -1), targets, T_c)
+        class_snnl_loss = snnl(feats.detach().reshape(feats.shape[0], -1), targets, T_c)
         class_snnl_loss.backward()
         t_optim.step()
 
@@ -341,7 +341,8 @@ def train_epoch_snnl(network, train_loader, optimizer, t_optim, T_d, T_c, ALPHA_
                   f"Target Acc : {100.0 * train_correct / train_total:.2f}\n\t "
                   f"Class loss: {class_snnl_loss_cum / batch_idx:.6f} "
                   f"Domain loss: {domain_snnl_loss_cum / batch_idx:.6f} "
-                  f"Td: {T_d.item():.6f}")
+                  f"Td: {T_d.item():.3f} "
+                  f"Tc: {T_c.item():.3f}")
 
     train_acc = 100. * train_correct / train_total
 
