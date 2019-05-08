@@ -318,8 +318,8 @@ def train_epoch_snnl(network, train_loader, optimizer, t_optim, T_d, T_c, ALPHA_
         targets = torch.cat((targets_s, targets_t), 0)
         domains = torch.cat((domain_s, domain_t), 0)
 
-        class_snnl_loss = snnl(logits, targets, T_c)
-        domain_snnl_loss = 1 / snnl(feats, domains, T_d)
+        class_snnl_loss = snnl(feats, targets, T_c)
+        domain_snnl_loss = snnl(feats, domains, T_d)
 
         loss = loss_cl + ALPHA_D * domain_snnl_loss + ALPHA_Y * class_snnl_loss
 
@@ -327,13 +327,13 @@ def train_epoch_snnl(network, train_loader, optimizer, t_optim, T_d, T_c, ALPHA_
         optimizer.step()
 
         t_optim.zero_grad()
-        class_snnl_loss = snnl(logits.detach, targets, T_c)
+        class_snnl_loss = snnl(feats.detach(), targets, T_c)
         class_snnl_loss.backward()
         t_optim.step()
-        # t_optim.zero_grad()
-        # domain_snnl_loss = snnl(logits.detach(), domains, T_d)
-        # domain_snnl_loss.backward()
-        # t_optim.step()
+        t_optim.zero_grad()
+        domain_snnl_loss = snnl(feats.detach(), domains, T_d)
+        domain_snnl_loss.backward()
+        t_optim.step()
 
         # compute statistics
         train_loss += loss_cl.item()
