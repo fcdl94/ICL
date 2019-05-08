@@ -111,6 +111,8 @@ class LeNet(nn.Module):
         super(LeNet, self).__init__()
         self.conv1 = nn.Conv2d(3, 32, kernel_size=5)
         self.conv2 = nn.Conv2d(32, 48, kernel_size=5)
+        self.conv2_drop = nn.Dropout2d()
+        self.drop = nn.Dropout()
 
         self.fc1 = nn.Linear(48 * 4 * 4, 100)
         self.fc2 = nn.Linear(100, 100)
@@ -130,10 +132,10 @@ class LeNet(nn.Module):
 
     def forward(self, input):
         x = F.max_pool2d(F.relu(self.conv1(input)), 2)
-        x = F.max_pool2d(F.relu(self.conv2(x)), 2)
-        feat = x.view(-1, 48*4*4)
+        x = F.max_pool2d(F.relu(self.conv2_drop(self.conv2(x))), 2)
+        feat = x.view(-1, 48 * 4 * 4)
 
-        logits = F.dropout(F.relu(self.fc1(feat)))
+        logits = self.drop(F.relu(self.fc1(feat)))
         logits = self.fc2(logits)
 
         return logits, feat
@@ -152,12 +154,12 @@ class Domain_classifier(nn.Module):
         self.fc1 = nn.Linear(48 * 4 * 4, 100)
         self.fc2 = nn.Linear(100, 1)
 
-    def forward(self, input, constant):
-        input = GRL(input, constant)
-        logits = F.relu(self.fc1(input))
-        logits = self.fc2(logits)
+    def forward(self, x, constant):
+        x = GRL(x, constant)
+        logits_ = F.relu(self.fc1(x))
+        logits = self.fc2(logits_)
 
-        return logits
+        return logits, logits_
 
 
 def svhn_net(pretrained=None, num_classes=10):
