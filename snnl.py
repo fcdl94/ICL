@@ -451,7 +451,7 @@ if __name__=='__main__':
     print("Result should be random guessing, i.e. 10% accuracy")
 
     best_val_loss = val_loss
-    best_epoch = epoch
+    best_epoch =-1 
     best_model = torch.save(net.state_dict(), "best"+name+".pth")
 
     T_d = nn.Parameter(torch.FloatTensor([0]).to(device))
@@ -483,8 +483,8 @@ if __name__=='__main__':
         # valid!
         val_loss, val_acc, dom_acc = valid(net, valid_loader=test_loader)
         print(f"Epoch {epoch + 1:03d} : Test Loss {val_loss:.6f}, Test Acc {val_acc:.2f}, Domain Acc {dom_acc:.2f}")
-		
-	if val_loss < best_val_loss:
+        	
+        if val_loss < best_val_loss:
             best_val_loss = val_loss
             best_epoch = epoch
             best_model = torch.save(net.state_dict(), "best"+name+".pth")
