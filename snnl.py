@@ -27,35 +27,32 @@ parser = argparse.ArgumentParser()
 parser.add_argument('name', default="snnl_", help='The name of experiment')
 parser.add_argument('-D', default=-1, type=float)
 parser.add_argument('-Y', default=1, type=float)
-
-
+parser.add_argument('-T', default=0, type=float)
+parser.add_argument('--dynamic', action='store_true')
 args = parser.parse_args()
 
 # parameters and utils
 device = 'cuda'
 ROOT = '/home/fcdl/dataset/'
 name = args.name
+print(args.D)
+print(args.Y)
 
-
-# SNNLoss definition
 def dist2(x):
     return torch.norm(x[:, None] - x, dim=2, p=2)
 
-
-def dist(x):
+def dist(x):    
     xn = x.norm(p=2, dim=1).pow(2)
     xn_t = xn.unsqueeze(0).t()
     xxT = torch.mm(x, x.permute(1, 0))
     dist = xn + xn_t - 2 * xxT + self.eps
     return dist
 
-
 def cosine_distance(x1, x2=None, eps=1e-8):
     x2 = x1 if x2 is None else x2
     w1 = x1.norm(p=2, dim=1, keepdim=True)
     w2 = w1 if x2 is x1 else x2.norm(p=2, dim=1, keepdim=True)
     return 1 - torch.mm(x1, x2.t()) / (w1 * w2.t()).clamp(min=eps)
-
 
 # SNNLoss definition
 class SNNLoss(nn.Module):
@@ -66,42 +63,44 @@ class SNNLoss(nn.Module):
     def forward(self, x, y, T):  # x 2-D matrix of BxF, y 1-D vector of B
         b = len(y)
 
-        # print(x.norm(p=2))
-        # x = x / x.std()
-
+        #print(x.norm(p=2))
+        x = x / x.std()
+        
         dist = dist2(x)
-
-        # print(dist)
-        # print(torch.pdist(x))
-
+        
+        #print(dist)
+        #print(torch.pdist(x))
+        
         # make diagonal mask
         m_den = 1 - torch.eye(b)
-        # m_den = torch.log(m_den.float())
+        #m_den = torch.log(m_den.float()) 
         m_den = m_den.float().to(x.device)
-
-        e_dist = (-dist) * torch.exp(T)
-
+        
+        e_dist = (-dist) * torch.pow(10, T)
+        
         den_dist = torch.clone(e_dist)
-        den_dist[m_den == 0] = float('-inf')
-
+        den_dist[ m_den == 0 ] = float('-inf')
+        
         # make per class mask
-        m_num = (y == y.unsqueeze(0).t()).type(torch.int) - torch.eye(b, dtype=torch.int).to(y.device)
+        m_num = (y != y.unsqueeze(0).t()).type(torch.int) #- torch.eye(b, dtype=torch.int).to(y.device)
         num_dist = torch.clone(e_dist)
-        num_dist[m_num == 0] = float('-inf')
-
+        num_dist[ m_num == 0 ] = float('-inf')
+        
         # compute logsumexp
         num = torch.logsumexp(num_dist, dim=1)
         den = torch.logsumexp(den_dist, dim=1)
-
-        # print(num, den)
-        if torch.sum(torch.isinf(num)) > 0:
+        
+        
+        #print(num, den)
+        if torch.sum(torch.isinf(num)) > 0 :
             num = num.clone()
             den = den.clone()
             den[torch.isinf(num)] = 0
             num[torch.isinf(num)] = 0
             print(torch.bincount(y))
 
-        if torch.sum(torch.isnan(num)) > 0:
+
+        if torch.sum(torch.isnan(num)) > 0 :
             print(x.shape)
             print(x)
             print(num_dist.shape)
@@ -111,54 +110,8 @@ class SNNLoss(nn.Module):
             print(num)
             print(den)
             raise Exception()
-
+        
         return -(num - den).mean()
-
-
-def train_epoch_single(network, train_loader, optimizer):
-    src_criterion = nn.CrossEntropyLoss()
-
-    network.train()
-    train_loss = 0
-    train_correct = 0
-    train_total = 0
-    batch_idx = 0
-
-    for batch in train_loader:
-
-        optimizer.zero_grad()
-
-        inputs, targets = batch
-
-        inputs = inputs.to(device)
-        targets = targets.to(device)
-
-        logits, feat = network.forward(inputs)  # feature vector only
-        prediction = network.predict(logits)  # class scores
-
-        loss_bx = src_criterion(prediction, targets)  # CE loss
-
-        loss_bx.backward()
-        optimizer.step()
-
-        # get predictions
-        _, predicted = prediction.max(1)
-        tr_tot = targets.size(0)
-        tr_crc = predicted.eq(targets).sum().item()
-
-        # compute statistics
-        train_loss += loss_bx.item()
-        train_total += tr_tot
-        train_correct += tr_crc
-
-        batch_idx += 1
-        if batch_idx % 200 == 0:
-            print(f"{batch_idx:3d} | Source Loss: {loss_bx:.6f} "
-                  f"Source Acc : {100.0 * train_correct / train_total:.2f}")
-
-    train_acc = 100. * train_correct / train_total
-
-    return train_loss / batch_idx, train_acc
 
 
 def train_epoch_dann(network, train_loader, optimizer, ALPHA=1, use_target_labels=True):
@@ -204,7 +157,7 @@ def train_epoch_dann(network, train_loader, optimizer, ALPHA=1, use_target_label
         # train the target
         inputs, targets = target_batch
 
-        inputs, targets = inputs.to(device), targets.to(device)  # class gt
+        inputs, targets = inputs.to(device), targets.to(device) # class gt
         domains = torch.ones(inputs.shape[0], 1).to(device)  # target is index 1
 
         logits, feat = network.forward(inputs)  # feature vector only
@@ -215,12 +168,12 @@ def train_epoch_dann(network, train_loader, optimizer, ALPHA=1, use_target_label
             loss_bx_tar = src_criterion(prediction, targets)
         else:
             loss_bx_tar = 0.
-
+        
         loss_bx_dom_t = dom_criterion(d_prediction, domains)
 
         # sum the losses and do backward propagation
         loss_dom = (loss_bx_dom_s + loss_bx_dom_t)
-        loss_bx = loss_bx_src + loss_bx_tar + loss_dom  # use target labels
+        loss_bx = loss_bx_src + loss_bx_tar + ALPHA*loss_dom # use target labels
 
         loss_bx.backward()
         optimizer.step()
@@ -236,12 +189,12 @@ def train_epoch_dann(network, train_loader, optimizer, ALPHA=1, use_target_label
 
         if loss_bx.item() >= 10:
             print(batch_idx, loss_bx_src, loss_bx_tar, loss_dom)
-
+        
         batch_idx += 1
         if batch_idx % 200 == 0:
             print(f"Batch {batch_idx} / {len(train_loader)}\n\t"
                   f"Lambda {lam:.4f} "
-                  f"Domain Loss: {loss_dom:.6f}\n\t"
+                  f"Domain Loss: {loss_dom:.6f}\n\t" 
                   f"Source Loss: {loss_bx_src:.6f} "
                   f"Source Acc : {100.0 * train_correct_src / train_total_src:.2f} "
                   f"SrcDom Acc : {1 - torch.sigmoid(s_prediction.detach()).mean().cpu().item():.3f}\n\t"
@@ -252,8 +205,7 @@ def train_epoch_dann(network, train_loader, optimizer, ALPHA=1, use_target_label
 
     train_acc = 100. * train_correct / train_total
 
-    return train_loss / batch_idx, train_acc
-
+    return train_loss/batch_idx, train_acc
 
 def train_epoch_snnl(network, train_loader, optimizer, t_optim, T_d, T_c, ALPHA_Y=1, ALPHA_D=-1):
     src_criterion = nn.CrossEntropyLoss()
@@ -303,7 +255,7 @@ def train_epoch_snnl(network, train_loader, optimizer, t_optim, T_d, T_c, ALPHA_
         prediction = network.predict(logit_t)  # class scores
         # d_prediction_t = network.discriminate_domain(feat_t)  # domain score
 
-        loss_bx_tar = src_criterion(prediction, targets_t)
+        loss_bx_tar = 0. # src_criterion(prediction, targets_t)
 
         _, predicted = prediction.max(1)
         tr_tot = targets_t.size(0)  # only on target
@@ -327,12 +279,12 @@ def train_epoch_snnl(network, train_loader, optimizer, t_optim, T_d, T_c, ALPHA_
         optimizer.step()
 
         t_optim.zero_grad()
-        class_snnl_loss = snnl(feats.detach(), targets, T_c)
-        class_snnl_loss.backward()
+        class_snnl_losst = snnl(feats.detach(), targets, T_c)
+        class_snnl_losst.backward()
         t_optim.step()
         t_optim.zero_grad()
-        domain_snnl_loss = snnl(feats.detach(), domains, T_d)
-        domain_snnl_loss.backward()
+        domain_snnl_losst = snnl(feats.detach(), domains, T_d)
+        domain_snnl_losst.backward()
         t_optim.step()
 
         # compute statistics
@@ -454,7 +406,7 @@ if __name__=='__main__':
     best_epoch =-1 
     best_model = torch.save(net.state_dict(), "best"+name+".pth")
 
-    T_d = nn.Parameter(torch.FloatTensor([0]).to(device))
+    T_d = nn.Parameter(torch.FloatTensor([args.T]).to(device))
     T_c = nn.Parameter(torch.FloatTensor([0]).to(device))
 
     # training loop
@@ -462,9 +414,13 @@ if __name__=='__main__':
         # steps
         start_steps = epoch * len(train_loader)
 
-        # p = float(epoch+1) / EPOCHS
-        # lam = (2. / (1. + np.exp(-10 * p))) - 1
-        # lam = 1
+        p = float(epoch) / EPOCHS
+        lam = args.D * ((2. / (1. + np.exp(-10 * p))) - 1)
+        
+        if args.dynamic:
+             alpha_d = lam
+        else:
+             alpha_d = args.D 
 
         # train epoch
         learning_rate = 0.01 / ((1 + 10 * (epoch) / EPOCHS) ** 0.75)
@@ -472,13 +428,12 @@ if __name__=='__main__':
         t_optim = optim.SGD([T_d, T_c], lr=0.0)
         # scheduler.step()
         print(f"Learning rate: {learning_rate}")
-        # print(f"Alphas: {lam}")
+        print(f"Alphas: {alpha_d}")
         # minimize_T(net, train_loader, t_optim, T_d)
 
         # train_loss, train_acc = train_epoch_snnl_dann(net, train_loader=train_loader, optimizer=optimizer, t_optim=t_optim, T_c=T_c, ALPHA_y=0., ALPHA=1.)
-        # train_loss, train_acc = train_epoch_snnl(net, train_loader=train_loader, optimizer=optimizer, t_optim=t_optim, T_d=T_d, T_c=T_c, ALPHA_Y=0. ALPHA_D=0.)
-        train_loss, train_acc = train_epoch_dann(net, train_loader=train_loader, optimizer=optimizer,
-                                                 use_target_labels=False)
+        train_loss, train_acc = train_epoch_snnl(net, train_loader=train_loader, optimizer=optimizer, t_optim=t_optim, T_d=T_d, T_c=T_c, ALPHA_Y=args.Y, ALPHA_D=alpha_d)
+        #train_loss, train_acc = train_epoch_dann(net, train_loader=train_loader, optimizer=optimizer, use_target_labels=False)
 
         # valid!
         val_loss, val_acc, dom_acc = valid(net, valid_loader=test_loader)
