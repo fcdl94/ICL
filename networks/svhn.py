@@ -22,12 +22,13 @@ class SVHN_net(nn.Module):
             bn = DAL
 
         self.conv1 = nn.Conv2d(3, 64, kernel_size=5)
-        self.bn1 = bn(64)
+        #self.bn1 = bn(64)
         self.conv2 = nn.Conv2d(64, 64, kernel_size=5)
-        self.bn2 = bn(64)
+        #self.bn2 = bn(64)
         self.conv3 = nn.Conv2d(64, 128, kernel_size=5, padding=2)
-        self.bn3 = bn(128)
+        #self.bn3 = bn(128)
         self.conv3_drop = nn.Dropout2d()
+        self.dropout = nn.Dropout()
 
         self.fc1 = nn.Linear(128 * 3 * 3, 3072)
         self.fc2 = nn.Linear(3072, 2048)
@@ -35,7 +36,6 @@ class SVHN_net(nn.Module):
         self.fc3 = nn.Linear(2048, n_classes)
 
         self.dom_discr = SVHN_Domain_classifier()
-        self.feat = None
 
         self.init_params()
 
@@ -62,18 +62,18 @@ class SVHN_net(nn.Module):
         self.set_domain(1)
 
     def forward(self, input):
-        x = F.relu(self.bn1(self.conv1(input)))
+        x = F.relu(self.conv1(input))
         x = F.max_pool2d(x, 3, 2)
-        x = F.relu(self.bn2(self.conv2(x)))
+        x = F.relu(self.conv2(x))
         x = F.max_pool2d(x, 3, 2)
-        x = F.relu(self.bn3(self.conv3(x)))
+        x = F.relu(self.conv3(x))
         x = self.conv3_drop(x)
 
         feat = x.view(-1, 128 * 3 * 3)
 
         logits = F.relu(self.fc1(feat))
-        logits = F.dropout(logits)
-        logits = self.fc2(logits)
+        logits = self.dropout(logits)
+        logits = F.relu(self.fc2(logits))
 
         return logits, feat
 
@@ -89,20 +89,21 @@ class SVHN_Domain_classifier(nn.Module):
     def __init__(self):
         super(SVHN_Domain_classifier, self).__init__()
         self.fc1 = nn.Linear(128 * 3 * 3, 1024)
-        self.bn1 = nn.BatchNorm1d(1024)
+        #self.bn1 = nn.BatchNorm1d(1024)
         self.fc2 = nn.Linear(1024, 1024)
-        self.bn2 = nn.BatchNorm1d(1024)
+        #self.bn2 = nn.BatchNorm1d(1024)
         self.fc3 = nn.Linear(1024, 1)
+        self.dropout = nn.Dropout()
 
     def forward(self, feat, lam):
         x = GRL(feat, lam)
-        x = F.relu(self.bn1(self.fc1(x)))
-        x = F.dropout(x)
-        x = F.relu(self.bn2(self.fc2(x)))
-        x = F.dropout(x)
+        x = F.relu(self.fc1(x))
+        x = self.dropout(x)
+        x_ = F.relu(self.fc2(x))
+        x = self.dropout(x_)
         x = self.fc3(x)
 
-        return x
+        return x, x_
 
 
 class LeNet(nn.Module):

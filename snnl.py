@@ -24,11 +24,13 @@ from networks.svhn import lenet_net, svhn_net
 import argparse
 
 parser = argparse.ArgumentParser()
-parser.add_argument('name', default="snnl_", help='The name of experiment')
-parser.add_argument('-D', default=-1, type=float)
-parser.add_argument('-Y', default=1, type=float)
+parser.add_argument('name', default="snnl", help='The name of experiment')
+parser.add_argument('-D', default=1, type=float)
+parser.add_argument('-Y', default=0, type=float)
 parser.add_argument('-T', default=0, type=float)
-parser.add_argument('--dynamic', action='store_true')
+parser.add_argument('--revgrad', action='store_true')
+parser.add_argument('--dataset', default="mnist")
+parser.add_argument('--uda', action='store_true')
 args = parser.parse_args()
 
 # parameters and utils
@@ -38,15 +40,9 @@ name = args.name
 print(args.D)
 print(args.Y)
 
-def dist2(x):
+def euc_dist(x):
     return torch.norm(x[:, None] - x, dim=2, p=2)
 
-def dist(x):    
-    xn = x.norm(p=2, dim=1).pow(2)
-    xn_t = xn.unsqueeze(0).t()
-    xxT = torch.mm(x, x.permute(1, 0))
-    dist = xn + xn_t - 2 * xxT + self.eps
-    return dist
 
 def cosine_distance(x1, x2=None, eps=1e-8):
     x2 = x1 if x2 is None else x2
@@ -54,53 +50,51 @@ def cosine_distance(x1, x2=None, eps=1e-8):
     w2 = w1 if x2 is x1 else x2.norm(p=2, dim=1, keepdim=True)
     return 1 - torch.mm(x1, x2.t()) / (w1 * w2.t()).clamp(min=eps)
 
+
 # SNNLoss definition
 class SNNLoss(nn.Module):
-    def __init__(self, eps=1e-6):
+    def __init__(self, inv=False, eps=1e-6):
         super().__init__()
         self.eps = eps
+        self.inv = inv
 
     def forward(self, x, y, T):  # x 2-D matrix of BxF, y 1-D vector of B
         b = len(y)
 
-        #print(x.norm(p=2))
         x = x / x.std()
-        
-        dist = dist2(x)
-        
-        #print(dist)
-        #print(torch.pdist(x))
+        dist = euc_dist(x)
         
         # make diagonal mask
         m_den = 1 - torch.eye(b)
-        #m_den = torch.log(m_den.float()) 
         m_den = m_den.float().to(x.device)
         
         e_dist = (-dist) * torch.pow(10, T)
         
         den_dist = torch.clone(e_dist)
-        den_dist[ m_den == 0 ] = float('-inf')
+        den_dist[m_den == 0] = float('-inf')
         
         # make per class mask
-        m_num = (y != y.unsqueeze(0).t()).type(torch.int) #- torch.eye(b, dtype=torch.int).to(y.device)
+
+        if self.inv:
+            m_num = (y != y.unsqueeze(0).t()).type(torch.int)  # - torch.eye(b, dtype=torch.int).to(y.device)
+        else:
+            m_num = (y == y.unsqueeze(0).t()).type(torch.int) - torch.eye(b, dtype=torch.int).to(y.device)
+
         num_dist = torch.clone(e_dist)
-        num_dist[ m_num == 0 ] = float('-inf')
+        num_dist[m_num == 0] = float('-inf')
         
         # compute logsumexp
         num = torch.logsumexp(num_dist, dim=1)
         den = torch.logsumexp(den_dist, dim=1)
-        
-        
-        #print(num, den)
-        if torch.sum(torch.isinf(num)) > 0 :
+
+        if torch.sum(torch.isinf(num)) > 0:
             num = num.clone()
             den = den.clone()
             den[torch.isinf(num)] = 0
             num[torch.isinf(num)] = 0
             print(torch.bincount(y))
 
-
-        if torch.sum(torch.isnan(num)) > 0 :
+        if torch.sum(torch.isnan(num)) > 0:
             print(x.shape)
             print(x)
             print(num_dist.shape)
@@ -207,8 +201,10 @@ def train_epoch_dann(network, train_loader, optimizer, ALPHA=1, use_target_label
 
     return train_loss/batch_idx, train_acc
 
-def train_epoch_snnl(network, train_loader, optimizer, t_optim, T_d, T_c, ALPHA_Y=1, ALPHA_D=-1, use_target_labels=True):
+
+def train_epoch_snnl(network, train_loader, optimizer, t_o, T_d, T_c, ALPHA_Y=0, ALPHA_D=-1, use_target_labels=False):
     src_criterion = nn.CrossEntropyLoss()
+    snnl_inv = SNNLoss(inv=True)
     snnl = SNNLoss()
 
     network.train()
@@ -220,7 +216,6 @@ def train_epoch_snnl(network, train_loader, optimizer, t_optim, T_d, T_c, ALPHA_
     train_total_src = 0
     train_correct_src = 0
     batch_idx = 0
-    # scheduler.step()
 
     for source_batch, target_batch in train_loader:
 
@@ -277,7 +272,7 @@ def train_epoch_snnl(network, train_loader, optimizer, t_optim, T_d, T_c, ALPHA_
         domains = torch.cat((domain_s, domain_t), 0)
 
         class_snnl_loss = snnl(feats, targets, T_c)
-        domain_snnl_loss = snnl(feats, domains, T_d)
+        domain_snnl_loss = snnl_inv(feats, domains, T_d)
 
         loss = loss_cl + lam * ALPHA_D * domain_snnl_loss 
 
@@ -319,7 +314,6 @@ def train_epoch_snnl(network, train_loader, optimizer, t_optim, T_d, T_c, ALPHA_
 
 def valid(network, valid_loader, conf_matrix=False):
     criterion = nn.CrossEntropyLoss()
-    snnl = SNNLoss()
     # make validation
     network.eval()
     test_loss = 0
@@ -366,15 +360,30 @@ if __name__=='__main__':
                                        transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])])
     augmentation = tv.transforms.Compose([transforms.RandomCrop(28)])
 
-    source = tv.datasets.MNIST(ROOT, train=True, download=True,
-                               transform=tv.transforms.Compose([
-                                   tv.transforms.Grayscale(3),
-                                   transform])
-                               )
+    if args.dataset == 'mnist':
+        source = tv.datasets.MNIST(ROOT, train=True, download=True,
+                                   transform=tv.transforms.Compose([
+                                       tv.transforms.Grayscale(3),
+                                       transform])
+                                   )
+        test = MNISTM(ROOT, train=False, download=True, transform=transform)
+        target = MNISTM(ROOT, train=True, download=True, transform=transform)
+        EPOCHS = 40
+        net = lenet_net().to(device)
+    else:
+        source = tv.datasets.SVHN(ROOT, download=True, transform=transform)
+        source.targets = torch.tensor(source.labels)
 
-    test = MNISTM(ROOT, train=False, download=True, transform=transform)
-
-    target = MNISTM(ROOT, train=True, download=True, transform=transform)
+        test = tv.datasets.MNIST(ROOT, train=False, download=True,
+                                 transform=tv.transforms.Compose([
+                                       tv.transforms.Grayscale(3),
+                                       transform]))
+        target = tv.datasets.MNIST(ROOT, train=True, download=True,
+                                   transform=tv.transforms.Compose([
+                                       tv.transforms.Grayscale(3),
+                                       transform]))
+        EPOCHS = 150
+        net = svhn_net().to(device)
 
     target_loader = DataLoader(target, batch_size=128, shuffle=True, num_workers=8)
     test_loader = DataLoader(test, batch_size=128, shuffle=False, num_workers=8)
@@ -394,13 +403,13 @@ if __name__=='__main__':
     mixed = DoubleDataset(half_source, half_target)
     mixed_loader = DataLoader(mixed, 64, True, num_workers=8, drop_last=True)
 
-    # define network
-    net = lenet_net().to(device)
+    if args.uda:
+        train_loader = unsda_loader
+        use_target_labels = False
+    else:
+        train_loader = mixed_loader
+        use_target_labels = True
 
-    # CE train loop!
-    train_loader = mixed_loader
-
-    EPOCHS = 40
     total_steps = EPOCHS * len(train_loader)
 
     print("Do a validation before starting to check it is ok...")
@@ -410,48 +419,43 @@ if __name__=='__main__':
 
     best_val_loss = val_loss
     best_epoch =-1 
-    best_model = torch.save(net.state_dict(), "best"+name+".pth")
+    best_model = torch.save(net.state_dict(),  "models/" + "best"+name+".pth")
 
     T_d = nn.Parameter(torch.FloatTensor([args.T]).to(device))
     T_c = nn.Parameter(torch.FloatTensor([0]).to(device))
+
+    t_o = optim.SGD([T_d, T_c], lr=0.0)
 
     # training loop
     for epoch in range(EPOCHS):
         # steps
         start_steps = epoch * len(train_loader)
 
-        #p = float(epoch) / EPOCHS
-        #lam = args.D * ((2. / (1. + np.exp(-5 * p))) - 1)
-        
-        # if args.dynamic:
-        #     alpha_d = lam
-        #else:
-        alpha_d = args.D 
+        alpha_d = args.D
 
         # train epoch
         learning_rate = 0.01 / ((1 + 10 * (epoch) / EPOCHS)**0.75)
         optimizer = optim.SGD(net.parameters(), lr=learning_rate, momentum=0.9)
-        t_optim = optim.SGD([T_d, T_c], lr=0.0)
         # scheduler.step()
         print(f"Learning rate: {learning_rate}")
-        print(f"Alphas: {alpha_d}")
-        # minimize_T(net, train_loader, t_optim, T_d)
 
-        # train_loss, train_acc = train_epoch_snnl_dann(net, train_loader=train_loader, optimizer=optimizer, t_optim=t_optim, T_c=T_c, ALPHA_y=0., ALPHA=1.)
-        train_loss, train_acc = train_epoch_snnl(net, train_loader=train_loader, optimizer=optimizer, t_optim=t_optim, T_d=T_d, T_c=T_c, ALPHA_Y=args.Y, ALPHA_D=alpha_d, use_target_labels=False)
-        #train_loss, train_acc = train_epoch_dann(net, train_loader=train_loader, optimizer=optimizer, use_target_labels=True)
+        if args.revgrad:
+            train_loss, train_acc = train_epoch_dann(net, train_loader=train_loader, optimizer=optimizer,
+                                                     use_target_labels=use_target_labels)
+        else:
+            train_loss, train_acc = train_epoch_snnl(net, train_loader=train_loader, optimizer=optimizer, t_o=t_o,
+                                                     T_d=T_d, T_c=T_c, ALPHA_D=alpha_d,
+                                                     use_target_labels=use_target_labels)
 
         # valid!
         val_loss, val_acc, dom_acc = valid(net, valid_loader=test_loader)
         print(f"Epoch {epoch + 1:03d} : Test Loss {val_loss:.6f}, Test Acc {val_acc:.2f}, Domain Acc {dom_acc:.2f}")
-        	
+
         if val_loss < best_val_loss:
             best_val_loss = val_loss
             best_epoch = epoch
-            best_model = torch.save(net.state_dict(), "best"+name+".pth")
-
-        #if train_loss < 1e-4:
-        #    break
+            best_model = torch.save(net.state_dict(),  "models/" + "best"+name+".pth")
 
     print(f"\n\n:Best Epoch {best_epoch + 1:03d} : Loss {best_val_loss:.6f}")
-    torch.save(net.state_dict(), args.name + ".pth")
+    torch.save(net.state_dict(), "models/" + args.name + ".pth")
+
