@@ -19,7 +19,7 @@ import matplotlib.pyplot as plt
 from data import MNISTM
 from data import DoubleDataset
 from data.common import get_index_of_classes
-from networks.svhn import lenet_net
+from networks.svhn import lenet_net, svhn_net
 
 import argparse
 
@@ -131,7 +131,7 @@ def train_epoch_dann(network, train_loader, optimizer, ALPHA=1, use_target_label
 
         p = float(batch_idx + start_steps) / total_steps
         lam = 2. / (1. + np.exp(-10 * p)) - 1
-
+        
         optimizer.zero_grad()
 
         inputs, targets = source_batch
@@ -207,7 +207,7 @@ def train_epoch_dann(network, train_loader, optimizer, ALPHA=1, use_target_label
 
     return train_loss/batch_idx, train_acc
 
-def train_epoch_snnl(network, train_loader, optimizer, t_optim, T_d, T_c, ALPHA_Y=1, ALPHA_D=-1):
+def train_epoch_snnl(network, train_loader, optimizer, t_optim, T_d, T_c, ALPHA_Y=1, ALPHA_D=-1, use_target_labels=True):
     src_criterion = nn.CrossEntropyLoss()
     snnl = SNNLoss()
 
@@ -224,6 +224,9 @@ def train_epoch_snnl(network, train_loader, optimizer, t_optim, T_d, T_c, ALPHA_
 
     for source_batch, target_batch in train_loader:
 
+        p = float(batch_idx + start_steps) / total_steps
+        lam = 2. / (1. + np.exp(-10 * p)) - 1
+        
         optimizer.zero_grad()
 
         inputs_s, targets_s = source_batch
@@ -255,14 +258,17 @@ def train_epoch_snnl(network, train_loader, optimizer, t_optim, T_d, T_c, ALPHA_
         prediction = network.predict(logit_t)  # class scores
         # d_prediction_t = network.discriminate_domain(feat_t)  # domain score
 
-        loss_bx_tar = 0. # src_criterion(prediction, targets_t)
+        if use_target_labels:
+            loss_bx_tar = src_criterion(prediction, targets_t)
+        else:
+            loss_bx_tar = 0.
 
         _, predicted = prediction.max(1)
         tr_tot = targets_t.size(0)  # only on target
         tr_crc = predicted.eq(targets_t).sum().item()  # only on target
 
         # sum the CE losses
-        loss_cl = loss_bx_src + loss_bx_tar
+        loss_cl = (loss_bx_src + loss_bx_tar)
 
         logits = torch.cat((logit_s, logit_t), 0)
         feats = torch.cat((feat_s, feat_t), 0)
@@ -273,19 +279,19 @@ def train_epoch_snnl(network, train_loader, optimizer, t_optim, T_d, T_c, ALPHA_
         class_snnl_loss = snnl(feats, targets, T_c)
         domain_snnl_loss = snnl(feats, domains, T_d)
 
-        loss = loss_cl + ALPHA_D * domain_snnl_loss + ALPHA_Y * class_snnl_loss
+        loss = loss_cl + lam * ALPHA_D * domain_snnl_loss 
 
         loss.backward()
         optimizer.step()
 
-        t_optim.zero_grad()
-        class_snnl_losst = snnl(feats.detach(), targets, T_c)
-        class_snnl_losst.backward()
-        t_optim.step()
-        t_optim.zero_grad()
-        domain_snnl_losst = snnl(feats.detach(), domains, T_d)
-        domain_snnl_losst.backward()
-        t_optim.step()
+        #t_optim.zero_grad()
+        #class_snnl_losst = snnl(feats.detach(), targets, T_c)
+        #class_snnl_losst.backward()
+        #t_optim.step()
+        #t_optim.zero_grad()
+        #domain_snnl_losst = snnl(feats.detach(), domains, T_d)
+        #domain_snnl_losst.backward()
+        #t_optim.step()
 
         # compute statistics
         train_loss += loss_cl.item()
@@ -304,7 +310,7 @@ def train_epoch_snnl(network, train_loader, optimizer, t_optim, T_d, T_c, ALPHA_
                   f"Class loss: {(class_snnl_loss_cum / batch_idx):.6f} "
                   f"Domain loss: {(domain_snnl_loss_cum / batch_idx):.6f} "
                   f"Td: {T_d.item():.3f} "
-                  f"Tc: {T_c.item():.3f}")
+                  f"Alpha: {lam*ALPHA_D:.3f}")
 
     train_acc = 100. * train_correct / train_total
 
@@ -392,7 +398,7 @@ if __name__=='__main__':
     net = lenet_net().to(device)
 
     # CE train loop!
-    train_loader = unsda_loader
+    train_loader = mixed_loader
 
     EPOCHS = 40
     total_steps = EPOCHS * len(train_loader)
@@ -414,16 +420,16 @@ if __name__=='__main__':
         # steps
         start_steps = epoch * len(train_loader)
 
-        p = float(epoch) / EPOCHS
-        lam = args.D * ((2. / (1. + np.exp(-10 * p))) - 1)
+        #p = float(epoch) / EPOCHS
+        #lam = args.D * ((2. / (1. + np.exp(-5 * p))) - 1)
         
-        if args.dynamic:
-             alpha_d = lam
-        else:
-             alpha_d = args.D 
+        # if args.dynamic:
+        #     alpha_d = lam
+        #else:
+        alpha_d = args.D 
 
         # train epoch
-        learning_rate = 0.01 / ((1 + 10 * (epoch) / EPOCHS) ** 0.75)
+        learning_rate = 0.01 / ((1 + 10 * (epoch) / EPOCHS)**0.75)
         optimizer = optim.SGD(net.parameters(), lr=learning_rate, momentum=0.9)
         t_optim = optim.SGD([T_d, T_c], lr=0.0)
         # scheduler.step()
@@ -432,8 +438,8 @@ if __name__=='__main__':
         # minimize_T(net, train_loader, t_optim, T_d)
 
         # train_loss, train_acc = train_epoch_snnl_dann(net, train_loader=train_loader, optimizer=optimizer, t_optim=t_optim, T_c=T_c, ALPHA_y=0., ALPHA=1.)
-        train_loss, train_acc = train_epoch_snnl(net, train_loader=train_loader, optimizer=optimizer, t_optim=t_optim, T_d=T_d, T_c=T_c, ALPHA_Y=args.Y, ALPHA_D=alpha_d)
-        #train_loss, train_acc = train_epoch_dann(net, train_loader=train_loader, optimizer=optimizer, use_target_labels=False)
+        train_loss, train_acc = train_epoch_snnl(net, train_loader=train_loader, optimizer=optimizer, t_optim=t_optim, T_d=T_d, T_c=T_c, ALPHA_Y=args.Y, ALPHA_D=alpha_d, use_target_labels=False)
+        #train_loss, train_acc = train_epoch_dann(net, train_loader=train_loader, optimizer=optimizer, use_target_labels=True)
 
         # valid!
         val_loss, val_acc, dom_acc = valid(net, valid_loader=test_loader)
@@ -444,8 +450,8 @@ if __name__=='__main__':
             best_epoch = epoch
             best_model = torch.save(net.state_dict(), "best"+name+".pth")
 
-        if train_loss < 1e-4:
-            break
+        #if train_loss < 1e-4:
+        #    break
 
     print(f"\n\n:Best Epoch {best_epoch + 1:03d} : Loss {best_val_loss:.6f}")
     torch.save(net.state_dict(), args.name + ".pth")
