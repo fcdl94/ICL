@@ -14,7 +14,7 @@ import torch.optim as optim
 import torchvision as tv
 from torchvision import transforms
 import numpy as np
-import matplotlib.pyplot as plt
+import datetime
 
 from data import MNISTM
 from data import DoubleDataset
@@ -24,7 +24,7 @@ from networks.svhn import lenet_net, svhn_net
 import argparse
 
 parser = argparse.ArgumentParser()
-parser.add_argument('name', default="snnl", help='The name of experiment')
+parser.add_argument('--suffix', default="0", help='The suffix for the name of experiment')
 parser.add_argument('-D', default=1, type=float)
 parser.add_argument('-Y', default=0, type=float)
 parser.add_argument('-T', default=0, type=float)
@@ -36,13 +36,13 @@ args = parser.parse_args()
 # parameters and utils
 device = 'cuda'
 ROOT = '/home/fcdl/dataset/'
-name = args.name
-print(args.D)
-print(args.Y)
+setting = f"{'uda' if args.uda else 'mixed'}-{args.dataset}"
+method = 'dann' if args.revgrad else f'snnl-{args.D}-{args.T}'
+method += f"_{args.suffix}"
+save_name = f"models/{setting}/method.pth"
 
 def euc_dist(x):
     return torch.norm(x[:, None] - x, dim=2, p=2)
-
 
 def cosine_distance(x1, x2=None, eps=1e-8):
     x2 = x1 if x2 is None else x2
@@ -368,7 +368,7 @@ if __name__=='__main__':
                                    )
         test = MNISTM(ROOT, train=False, download=True, transform=transform)
         target = MNISTM(ROOT, train=True, download=True, transform=transform)
-        EPOCHS = 40
+        EPOCHS = 1
         net = lenet_net().to(device)
     else:
         source = tv.datasets.SVHN(ROOT, download=True, transform=transform)
@@ -418,8 +418,9 @@ if __name__=='__main__':
     print("Result should be random guessing, i.e. 10% accuracy")
 
     best_val_loss = val_loss
-    best_epoch =-1 
-    best_model = torch.save(net.state_dict(),  "models/" + "best"+name+".pth")
+    best_epoch =-1
+    best_val_acc = val_acc
+    best_model = torch.save(net.state_dict(),  save_name)
 
     T_d = nn.Parameter(torch.FloatTensor([args.T]).to(device))
     T_c = nn.Parameter(torch.FloatTensor([0]).to(device))
@@ -453,9 +454,11 @@ if __name__=='__main__':
 
         if val_loss < best_val_loss:
             best_val_loss = val_loss
+            best_val_acc = val_acc
             best_epoch = epoch
-            best_model = torch.save(net.state_dict(),  "models/" + "best"+name+".pth")
+            best_model = torch.save(net.state_dict(),  save_name)
 
-    print(f"\n\n:Best Epoch {best_epoch + 1:03d} : Loss {best_val_loss:.6f}")
-    torch.save(net.state_dict(), "models/" + args.name + ".pth")
+    with open('results.csv', 'a') as file:
+        file.write(f"{datetime.datetime.now().strftime('%Y-%m-%d-%H-%M')},{setting},{method},{EPOCHS},{val_loss},{val_acc},{best_epoch},{best_val_loss},{best_val_acc}\n")
+
 
