@@ -220,7 +220,7 @@ def train_epoch_snnl(network, train_loader, optimizer, t_o, T_d, T_c, ALPHA_Y=0,
     for source_batch, target_batch in train_loader:
 
         p = float(batch_idx + start_steps) / total_steps
-        lam = 2. / (1. + np.exp(-10 * p)) - 1
+        lam = 2. / (1. + np.exp(-5 * p)) - 1
         
         optimizer.zero_grad()
 
@@ -368,7 +368,7 @@ if __name__=='__main__':
                                    )
         test = MNISTM(ROOT, train=False, download=True, transform=transform)
         target = MNISTM(ROOT, train=True, download=True, transform=transform)
-        EPOCHS = 1
+        EPOCHS = 40 
         net = lenet_net().to(device)
     else:
         source = tv.datasets.SVHN(ROOT, download=True, transform=transform)
@@ -410,7 +410,8 @@ if __name__=='__main__':
         train_loader = mixed_loader
         use_target_labels = True
 
-    total_steps = EPOCHS * len(train_loader)
+    start_epoch = 5
+    total_steps = (EPOCHS-start_epoch) * len(train_loader)
 
     print("Do a validation before starting to check it is ok...")
     val_loss, val_acc, dom_acc = valid(net, valid_loader=test_loader)
@@ -426,13 +427,14 @@ if __name__=='__main__':
     T_c = nn.Parameter(torch.FloatTensor([0]).to(device))
 
     t_o = optim.SGD([T_d, T_c], lr=0.0)
-
     # training loop
     for epoch in range(EPOCHS):
         # steps
-        start_steps = epoch * len(train_loader)
-
-        alpha_d = args.D
+        start_steps = (epoch-start_epoch) * len(train_loader)
+        
+        alpha_d = 0
+        if epoch>=start_epoch: 
+            alpha_d = args.D
 
         # train epoch
         learning_rate = 0.01 / ((1 + 10 * (epoch) / EPOCHS)**0.75)
