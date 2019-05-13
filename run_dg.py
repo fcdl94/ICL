@@ -47,8 +47,8 @@ if __name__ == '__main__':
     else:
         assert False, "Dataset not found"
 
-    train_loader = DataLoader(source, 128, True, drop_last=True)
-    test_loader = DataLoader(target, 128, False, drop_last=False)
+    train_loader = DataLoader(source, 64, True, drop_last=True)
+    test_loader = DataLoader(target, 64, False, drop_last=False)
 
     start_epoch = 5
     total_steps = (EPOCHS-start_epoch) * len(train_loader)
@@ -73,9 +73,7 @@ if __name__ == '__main__':
         # steps
         start_steps = (epoch-start_epoch) * len(train_loader)
 
-        alpha_d = 0
-        if epoch >= start_epoch:
-            alpha_d = args.D
+        alpha_d = args.D
 
         # train epoch
         learning_rate = 0.01 / ((1 + 10 * (epoch) / EPOCHS)**0.75)
@@ -85,10 +83,11 @@ if __name__ == '__main__':
 
         if args.revgrad:
             train_loss, train_acc = train_epoch_dann_dg(net, start_steps, total_steps, train_loader=train_loader,
-                                                     optimizer=optimizer)
+                                                        optimizer=optimizer)
         else:
             train_loss, train_acc = train_epoch_snnl_dg(net, start_steps, total_steps, train_loader=train_loader,
-                                                     optimizer=optimizer, t_o=t_o, T_d=T_d, T_c=T_c, ALPHA_D=alpha_d,)
+                                                        optimizer=optimizer, t_o=t_o, T_d=T_d, T_c=T_c, ALPHA_D=alpha_d,
+                                                        ALPHA_Y=args.Y)
 
         # valid!
         val_loss, val_acc, dom_acc = valid(net, valid_loader=test_loader)

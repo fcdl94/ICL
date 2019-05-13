@@ -111,7 +111,7 @@ class ResNet(nn.Module):
         assert self.domain_discriminator is not None, "Calling discriminate_domain without enabling rev_grad"
         x = GRL(x, const)
         x = self.domain_discriminator(x)
-        return x
+        return x, xgi
 
     def set_domain(self, domain):
         for mod in self.modules():

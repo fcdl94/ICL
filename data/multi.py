@@ -46,7 +46,8 @@ def office_home(ROOT, sources, target):
              "c": ROOT + "office/Clipart",
              "r": ROOT + "office/Real World"}
 
-    transform = tv.transforms.Compose([transforms.ToTensor(),
+    transform = tv.transforms.Compose([transforms.Resize((224, 224)),
+                                       transforms.ToTensor(),
                                        transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])])
 
     sources_ = MultiDataset([ImageFolder(paths[char], transform) for char in sources])
@@ -59,7 +60,9 @@ def pacs(ROOT, sources, target):
              "atr": ROOT + "pacs/train/art_painting", "ate": ROOT + "pacs/test/art_painting",
              "ctr": ROOT + "pacs/train/cartoon", "cte": ROOT + "pacs/test/cartoon",
              "str": ROOT + "pacs/train/sketch", "ste": ROOT + "pacs/test/sketch"}
-    transform = tv.transforms.Compose([transforms.ToTensor(),
+
+    transform = tv.transforms.Compose([transforms.Resize((224, 224)),
+                                       transforms.ToTensor(),
                                        transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])])
 
     sources_ = MultiDataset([ImageFolder(paths[char+"tr"], transform) for char in sources])
