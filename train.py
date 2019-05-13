@@ -3,12 +3,12 @@ import torch.nn as nn
 import numpy as np
 from snnl import SNNLoss
 
+device = 'cuda'
+
 
 def train_epoch_dann(network, start_steps, total_steps, train_loader, optimizer, ALPHA=1, use_target_labels=True):
     src_criterion = nn.CrossEntropyLoss()
     dom_criterion = nn.BCEWithLogitsLoss()
-
-    device = network.device
 
     network.train()
     train_loss = 0
@@ -105,8 +105,6 @@ def train_epoch_snnl(network, start_steps, total_steps, train_loader, optimizer,
     snnl_inv = SNNLoss(inv=True)
     snnl = SNNLoss()
 
-    device = network.device
-
     network.train()
     train_loss = 0
     class_snnl_loss_cum = 0
@@ -171,10 +169,10 @@ def train_epoch_snnl(network, start_steps, total_steps, train_loader, optimizer,
         targets = torch.cat((targets_s, targets_t), 0)
         domains = torch.cat((domain_s, domain_t), 0)
 
-        class_snnl_loss = snnl(feats, targets, T_c)
+        class_snnl_loss = snnl(logits, targets, T_c)
         domain_snnl_loss = snnl_inv(feats, domains, T_d)
 
-        loss = loss_cl + lam * ALPHA_D * domain_snnl_loss
+        loss = loss_cl + lam * ALPHA_D * domain_snnl_loss + ALPHA_Y * class_snnl_loss
 
         loss.backward()
         optimizer.step()
@@ -220,7 +218,6 @@ def valid(network, valid_loader, conf_matrix=False):
     test_correct = 0
     test_total = 0
     domain_acc = 0
-    device = network.device
 
     targets_cum = []
     predict_cum = []
@@ -257,8 +254,6 @@ def valid(network, valid_loader, conf_matrix=False):
 def train_epoch_dann_dg(network, start_steps, total_steps, train_loader, optimizer, ALPHA=1, use_target_labels=True):
     src_criterion = nn.CrossEntropyLoss()
     dom_criterion = nn.CrossEntropyLoss()
-
-    device = network.device
 
     network.train()
     train_loss = 0
@@ -320,22 +315,18 @@ def train_epoch_snnl_dg(network, start_steps, total_steps, train_loader, optimiz
     snnl_inv = SNNLoss(inv=True)
     snnl = SNNLoss()
 
-    device = network.device
-
     network.train()
     train_loss = 0
     class_snnl_loss_cum = 0
     domain_snnl_loss_cum = 0
     train_correct = 0
     train_total = 0
-    train_total_src = 0
-    train_correct_src = 0
     batch_idx = 0
 
     for batch in train_loader:
 
         p = float(batch_idx + start_steps) / total_steps
-        lam = 2. / (1. + np.exp(-5 * p)) - 1
+        lam = 2. / (1. + np.exp(-10 * p)) - 1
 
         optimizer.zero_grad()
 
@@ -351,13 +342,10 @@ def train_epoch_snnl_dg(network, start_steps, total_steps, train_loader, optimiz
         tr_tot = targets.size(0)  # only on target
         tr_crc = predicted.eq(targets).sum().item()  # only on target
 
-        train_total_src += tr_tot
-        train_correct_src += tr_crc
-
         class_snnl_loss = snnl(feats, targets, T_c)
         domain_snnl_loss = snnl_inv(feats, domains, T_d)
 
-        loss = loss_cl + lam * ALPHA_D * domain_snnl_loss
+        loss = loss_cl + lam * ALPHA_D * domain_snnl_loss + ALPHA_Y * class_snnl_loss
 
         loss.backward()
         optimizer.step()
@@ -382,7 +370,7 @@ def train_epoch_snnl_dg(network, start_steps, total_steps, train_loader, optimiz
         if batch_idx % 200 == 0 or batch_idx == 1:
             print(f"Batch {batch_idx} / {len(train_loader)}\n\t"
                   f"Source Loss: {loss_cl:.6f} "
-                  f"Source Acc : {100.0 * train_correct_src / train_total_src:.2f}\n\t"
+                  f"Source Acc : {100.0 * train_correct / train_total:.2f}\n\t"
                   f"Class loss: {(class_snnl_loss_cum / batch_idx):.6f} "
                   f"Domain loss: {(domain_snnl_loss_cum / batch_idx):.6f} "
                   f"Td: {T_d.item():.3f} "

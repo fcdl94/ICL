@@ -19,7 +19,7 @@ parser.add_argument('-Y', default=0, type=float)
 parser.add_argument('-T', default=0, type=float)
 parser.add_argument('--revgrad', action='store_true')
 parser.add_argument('--dataset', default="office")
-parser.add_argument('--domains', default="pac")
+parser.add_argument('--sources', default="pac")
 parser.add_argument('--target', default="r")
 args = parser.parse_args()
 
