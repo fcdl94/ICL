@@ -1,15 +1,10 @@
-from torch.utils.data import DataLoader, Subset
+from torch.utils.data import DataLoader
 import torch.optim as optim
-import torchvision as tv
-from torchvision import transforms
 import datetime
-
 from data import multi
-from data import DoubleDataset
-from data.common import get_index_of_classes
 from networks.networks import resnet18, resnet50
 from train import *
-
+import os
 import argparse
 from logger import TensorboardXLogger as Log
 
@@ -27,10 +22,12 @@ args = parser.parse_args()
 # parameters and utils
 device = 'cuda'
 ROOT = '/home/fcdl/dataset/'
-setting = f"dg-{args.dataset}"
+setting = f"dg-{args.dataset}-{args.sources}-{args.target}"
 method = 'dann' if args.revgrad else f'snnl-{args.D}-{args.T}'
 method += f"_{args.suffix}"
 save_name = f"models/{setting}/{method}.pth"
+
+os.makedirs(f"models/{setting}/", exist_ok=True)
 
 if __name__ == '__main__':
     log = Log(f'logs/{setting}', method)

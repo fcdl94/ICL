@@ -4,14 +4,14 @@ import torchvision as tv
 from torchvision import transforms
 from torchvision.datasets import ImageFolder
 import datetime
-
+import torch
 from data import MNISTM
 from data import DoubleDataset
 from data.common import get_index_of_classes
 from networks.svhn import lenet_net, svhn_net
 from train import *
 from logger import TensorboardXLogger as Log
-
+import os
 import argparse
 
 parser = argparse.ArgumentParser()
@@ -22,8 +22,8 @@ parser.add_argument('-T', default=0, type=float)
 parser.add_argument('--revgrad', action='store_true')
 parser.add_argument('--dataset', default="mnist")
 parser.add_argument('--uda', action='store_true')
-parser.add_argument('--source', default="p")
-parser.add_argument('--target', default="r")
+parser.add_argument('-s', '--source', default="p")
+parser.add_argument('-t', '--target', default="r")
 parser.add_argument('--start_epoch', default=0)
 
 args = parser.parse_args()
@@ -31,11 +31,12 @@ args = parser.parse_args()
 # parameters and utils
 device = 'cuda'
 ROOT = '/home/fcdl/dataset/'
-setting = f"{'uda' if args.uda else 'mixed'}-{args.dataset}"
+setting = f"{'uda' if args.uda else 'mixed'}-{args.dataset}-{args.source}-{args.target}"
 method = 'dann' if args.revgrad else f'snnl-d{args.D:.1f}-t{args.T:.1f}'
 method += f"_{args.suffix}"
 save_name = f"models/{setting}/{method}.pth"
 
+os.makedirs(f"models/{setting}/", exist_ok=True)
 
 def get_setting():
 
@@ -107,10 +108,10 @@ def get_setting():
     unsda_loader = DataLoader(unsda, batch_size//2, True, num_workers=8)
 
     # get mnist [0:4], mnistm[4:9]
-    indices = get_index_of_classes(target.targets, list(range(0, 5)))
+    indices = get_index_of_classes(torch.tensor(target.targets), list(range(0, 5)))
     half_target = Subset(target, indices)
 
-    indices = get_index_of_classes(source.targets, list(range(5, 10)))
+    indices = get_index_of_classes(torch.tensor(source.targets), list(range(5, 10)))
     half_source = Subset(source, indices)
 
     mixed = DoubleDataset(half_source, half_target)

@@ -206,7 +206,7 @@ def train_epoch_snnl(network, start_steps, total_steps, train_loader, optimizer,
                   f"Td: {T_d.item():.3f} "
                   f"Alpha: {lam * ALPHA_D:.3f}")
 
-    train_acc = 100. * train_correct / train_total
+    train_acc = 100. * train_correct_src / train_total_src
 
     return train_loss / batch_idx, train_acc, domain_snnl_loss_cum / batch_idx, class_snnl_loss_cum / batch_idx
 
