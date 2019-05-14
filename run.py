@@ -2,6 +2,7 @@ from torch.utils.data import DataLoader, Subset
 import torch.optim as optim
 import torchvision as tv
 from torchvision import transforms
+from torchvision.datasets import ImageFolder
 import datetime
 
 from data import MNISTM
@@ -20,6 +21,10 @@ parser.add_argument('-T', default=0, type=float)
 parser.add_argument('--revgrad', action='store_true')
 parser.add_argument('--dataset', default="mnist")
 parser.add_argument('--uda', action='store_true')
+parser.add_argument('--source', default="p")
+parser.add_argument('--target', default="r")
+parser.add_argument('--start_epoch', default=0)
+
 args = parser.parse_args()
 
 # parameters and utils
@@ -46,6 +51,33 @@ def get_setting():
         target = MNISTM(ROOT, train=True, download=True, transform=transform)
         EPOCHS = 40
         net = lenet_net().to(device)
+        batch_size = 128
+    elif args.dataset == 'office':
+        from networks.networks import resnet50
+        paths = {"p": ROOT + "office/Product",
+                 "a": ROOT + "office/Art",
+                 "c": ROOT + "office/Clipart",
+                 "r": ROOT + "office/Real World"}
+
+        normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                         std=[0.229, 0.224, 0.225])
+
+        # Normalize to have range between -1,1 : (x - 0.5) * 2
+        transform = transforms.Compose([transforms.Resize((224, 224)),
+                                        transforms.ToTensor(),
+                                        normalize])
+        # Create data augmentation transform
+        augmentation = transforms.Compose([transforms.RandomResizedCrop(224, (0.6, 1.)),
+                                           transforms.RandomHorizontalFlip(),
+                                           transform])
+
+        source = ImageFolder(paths[args.source], augmentation)
+        target = ImageFolder(paths[args.target], transform)
+
+        test = target
+        EPOCHS = 60
+        net = resnet50(pretrained=True, num_classes=65).to(device)
+        batch_size = 32
     else:
         transform = tv.transforms.Compose([transforms.Resize((28, 28)),
                                            transforms.ToTensor(),
@@ -62,15 +94,16 @@ def get_setting():
                                        tv.transforms.Grayscale(3),
                                        transform]))
         EPOCHS = 150
+        batch_size = 128
         net = svhn_net().to(device)
 
-    target_loader = DataLoader(target, batch_size=128, shuffle=True, num_workers=8)
-    test_loader = DataLoader(test, batch_size=128, shuffle=False, num_workers=8)
-    source_loader = DataLoader(source, batch_size=128, shuffle=True, num_workers=8)
+    # target_loader = DataLoader(target, batch_size=batch_size, shuffle=True, num_workers=8)
+    test_loader = DataLoader(test, batch_size=batch_size, shuffle=False, num_workers=8)
+    # source_loader = DataLoader(source, batch_size=batch_size, shuffle=True, num_workers=8)
 
     # make the hybrid dataset here.
     unsda = DoubleDataset(source, target)
-    unsda_loader = DataLoader(unsda, 64, True, num_workers=8)
+    unsda_loader = DataLoader(unsda, batch_size//2, True, num_workers=8)
 
     # get mnist [0:4], mnistm[4:9]
     indices = get_index_of_classes(target.targets, list(range(0, 5)))
@@ -80,7 +113,7 @@ def get_setting():
     half_source = Subset(source, indices)
 
     mixed = DoubleDataset(half_source, half_target)
-    mixed_loader = DataLoader(mixed, 64, True, num_workers=8, drop_last=True)
+    mixed_loader = DataLoader(mixed, batch_size//2, True, num_workers=8, drop_last=True)
 
     if args.uda:
         train_loader = unsda_loader
@@ -101,7 +134,7 @@ if __name__ == '__main__':
     else:
         use_target_labels = True
 
-    start_epoch = 5
+    start_epoch = args.start_epoch
     total_steps = (EPOCHS-start_epoch) * len(train_loader)
 
     print("Do a validation before starting to check it is ok...")

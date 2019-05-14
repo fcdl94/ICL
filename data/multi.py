@@ -47,11 +47,19 @@ def office_home(ROOT, sources, target):
              "c": ROOT + "office/Clipart",
              "r": ROOT + "office/Real World"}
 
-    transform = tv.transforms.Compose([transforms.Resize((224, 224)),
-                                       transforms.ToTensor(),
-                                       transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])])
+    normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                     std=[0.229, 0.224, 0.225])
 
-    sources_ = MultiDataset([ImageFolder(paths[char], transform) for char in sources])
+    # Normalize to have range between -1,1 : (x - 0.5) * 2
+    transform = transforms.Compose([transforms.Resize((224, 224)),
+                                    transforms.ToTensor(),
+                                    normalize])
+    # Create data augmentation transform
+    augmentation = transforms.Compose([transforms.RandomResizedCrop(224, (0.6, 1.)),
+                                       transforms.RandomHorizontalFlip(),
+                                       transform])
+
+    sources_ = MultiDataset([ImageFolder(paths[char], augmentation) for char in sources])
     target_ = ImageFolder(paths[target], transform)
     return sources_, target_
 
@@ -62,10 +70,18 @@ def pacs(ROOT, sources, target):
              "ctr": ROOT + "pacs/train/cartoon", "cte": ROOT + "pacs/test/cartoon",
              "str": ROOT + "pacs/train/sketch", "ste": ROOT + "pacs/test/sketch"}
 
-    transform = tv.transforms.Compose([transforms.Resize((224, 224)),
-                                       transforms.ToTensor(),
-                                       transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])])
+    normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                     std=[0.229, 0.224, 0.225])
 
-    sources_ = MultiDataset([ImageFolder(paths[char+"tr"], transform) for char in sources])
+    # Normalize to have range between -1,1 : (x - 0.5) * 2
+    transform = transforms.Compose([transforms.Resize((224, 224)),
+                                    transforms.ToTensor(),
+                                    normalize])
+    # Create data augmentation transform
+    augmentation = transforms.Compose([transforms.RandomResizedCrop(224, (0.6, 1.)),
+                                       transforms.RandomHorizontalFlip(),
+                                       transform])
+
+    sources_ = MultiDataset([ImageFolder(paths[char+"tr"], augmentation) for char in sources])
     target_ = ImageFolder(paths[target+"te"], transform)
     return sources_, target_

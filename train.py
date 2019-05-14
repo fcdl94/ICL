@@ -214,7 +214,7 @@ def train_epoch_snnl(network, start_steps, total_steps, train_loader, optimizer,
 def valid(network, valid_loader, conf_matrix=False):
     criterion = nn.CrossEntropyLoss()
     # make validation
-    network.eval()
+
     test_loss = 0
     test_correct = 0
     test_total = 0
