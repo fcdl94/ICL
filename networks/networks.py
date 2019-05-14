@@ -45,14 +45,11 @@ class ResNet(nn.Module):
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
         self.fc = nn.Linear(512 * block.expansion, num_classes)
 
-        if revgrad:
-            self.domain_discriminator = nn.Sequential(nn.Linear(512 * block.expansion, 1024),
-                                                      nn.ReLU(),
-                                                      nn.Linear(1024, 1024),
-                                                      nn.ReLU(),
-                                                      nn.Linear(1024, 1))
-        else:
-            self.domain_discriminator = None
+        self.domain_discriminator = nn.Sequential(nn.Linear(512 * block.expansion, 1024),
+                                                  nn.ReLU(),
+                                                  nn.Linear(1024, 1024),
+                                                  nn.ReLU(),
+                                                  nn.Linear(1024, 1))
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
