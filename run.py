@@ -24,7 +24,7 @@ parser.add_argument('--dataset', default="mnist")
 parser.add_argument('--uda', action='store_true')
 parser.add_argument('-s', '--source', default="p")
 parser.add_argument('-t', '--target', default="r")
-parser.add_argument('--start_epoch', default=0)
+parser.add_argument('--start_epoch', default=0, type=int)
 
 args = parser.parse_args()
 

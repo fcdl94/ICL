@@ -15,12 +15,13 @@ class TensorboardXLogger:
         logging.info(f"Epoch {epoch + 1:3d} : Train Loss {train_loss:.6f}, Train Acc {train_acc:.2f}\n"
                      f"          : Valid Loss {valid_loss:.6f}, Valid Acc {valid_acc:.2f}")
 
-        self.writer.add_scalars(f'loss', {'train': train_loss,
-                                          'valid': valid_loss}, epoch)
-        self.writer.add_scalars(f'snnl', {'domain': domain_loss,
-                                          'class': class_loss}, epoch)
-        self.writer.add_scalars(f'acc', {'train': train_acc,
-                                         'valid': valid_acc}, epoch)
+        self.writer.add_scalar(f'loss-train', train_loss, epoch)
+        self.writer.add_scalar(f'loss-valid', train_loss, epoch)
+        self.writer.add_scalar(f'snnl-class', class_loss, epoch)
+        self.writer.add_scalar(f'snnl-domain', domain_loss, epoch)
+        self.writer.add_scalar(f'acc-train', train_acc, epoch)
+        self.writer.add_scalar(f'acc-val', valid_acc, epoch)
+
         for k in kwargs:
             self.writer.add_scalar(k, kwargs[k], epoch)
 
