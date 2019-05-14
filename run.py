@@ -125,7 +125,7 @@ if __name__ == '__main__':
         start_steps = (epoch-start_epoch) * len(train_loader)
 
         alpha_d = 0
-        if epoch>=start_epoch:
+        if epoch >= start_epoch:
             alpha_d = args.D
 
         # train epoch

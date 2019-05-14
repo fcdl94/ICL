@@ -100,7 +100,8 @@ def train_epoch_dann(network, start_steps, total_steps, train_loader, optimizer,
     return train_loss / batch_idx, train_acc
 
 
-def train_epoch_snnl(network, start_steps, total_steps, train_loader, optimizer, t_o, T_d, T_c, ALPHA_Y=0, ALPHA_D=-1, use_target_labels=False):
+def train_epoch_snnl(network, start_steps, total_steps, train_loader, optimizer, t_o, T_d, T_c,
+                     ALPHA_Y=0, ALPHA_D=-1, use_target_labels=False):
     src_criterion = nn.CrossEntropyLoss()
     snnl_inv = SNNLoss(inv=True)
     snnl = SNNLoss()
@@ -118,7 +119,7 @@ def train_epoch_snnl(network, start_steps, total_steps, train_loader, optimizer,
     for source_batch, target_batch in train_loader:
 
         p = float(batch_idx + start_steps) / total_steps
-        lam = 2. / (1. + np.exp(-5 * p)) - 1
+        lam = 2. / (1. + np.exp(-10 * p)) - 1
 
         optimizer.zero_grad()
 
@@ -163,13 +164,13 @@ def train_epoch_snnl(network, start_steps, total_steps, train_loader, optimizer,
         # sum the CE losses
         loss_cl = (loss_bx_src + loss_bx_tar)
 
-        logits = torch.cat((logit_s, logit_t), 0)
+        # logits = torch.cat((logit_s, logit_t), 0)
         feats = torch.cat((feat_s, feat_t), 0)
         # d_prediction = torch.cat((d_prediction_s, d_prediction_t), 0)
-        targets = torch.cat((targets_s, targets_t), 0)
+        # targets = torch.cat((targets_s, targets_t), 0)
         domains = torch.cat((domain_s, domain_t), 0)
 
-        class_snnl_loss = snnl(logits, targets, T_c)
+        class_snnl_loss = snnl(feat_s, targets_s, T_c)
         domain_snnl_loss = snnl_inv(feats, domains, T_d)
 
         loss = loss_cl + lam * ALPHA_D * domain_snnl_loss + ALPHA_Y * class_snnl_loss
