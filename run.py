@@ -31,7 +31,7 @@ args = parser.parse_args()
 # parameters and utils
 device = 'cuda'
 ROOT = '/home/fcdl/dataset/'
-setting = f"{'uda' if args.uda else 'mixed'}-{args.dataset}-{args.source}-{args.target}"
+setting = f"{'uda' if args.uda else 'mixed'}-{args.dataset}/{args.source}-{args.target}"
 method = 'dann' if args.revgrad else f'snnl-d{args.D:.1f}-t{args.T:.1f}'
 method += f"_{args.suffix}"
 save_name = f"models/{setting}/{method}.pth"
