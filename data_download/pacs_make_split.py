@@ -8,9 +8,9 @@ parser.add_argument('--domain', default="cartoon", help='The domain to split')
 args = parser.parse_args()
 
 root = '/home/fcdl/dataset/pacs/'
-source = root + "kfold/" + args.domain
+source = root + "kfold/"
 
-dest = root + args.split +"/" + args.domain
+dest = root + args.split + "/" + args.domain
 
 split_name = "crossval" if args.split == 'val' else args.split
 
@@ -20,12 +20,12 @@ os.makedirs(dest, exist_ok=True)
 
 with open(split_file, "r") as file:
     for line in file.readlines():
-        img = root + line.split(" ")[0]
-        dest_cl = dest + "/" + img.split("/")[1]
+        img = source + line.split(" ")[0]
+        dest_cl = dest + "/" + line.split("/")[1] + "/"
 
         if not os.path.exists(dest_cl):
             os.makedirs(dest_cl)
 
         print(f"Parsing image {img}")
 
-        os.link(img, dest_cl)
+        os.link(img, dest_cl + line.split(" ")[0].split("/")[2])

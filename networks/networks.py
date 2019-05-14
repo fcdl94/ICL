@@ -395,7 +395,7 @@ def resnet18(pretrained=None, num_classes=1000):
     """
     model = ResNet(BasicBlock, [2, 2, 2, 2])
     if pretrained is not None:
-        model.load_state_dict(model_zoo.load_url(model_urls['resnet18']))
+        model.load_state_dict(model_zoo.load_url(model_urls['resnet18']), strict=False)
 
     num_ftrs = model.fc.in_features
     model.fc = nn.Linear(num_ftrs, num_classes)

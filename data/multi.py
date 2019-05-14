@@ -3,6 +3,7 @@ import torchvision as tv
 from torchvision.datasets import ImageFolder
 from torchvision import transforms
 import bisect
+import torch
 
 
 class MultiDataset(Dataset):
