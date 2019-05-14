@@ -208,12 +208,14 @@ def train_epoch_snnl(network, start_steps, total_steps, train_loader, optimizer,
 
     train_acc = 100. * train_correct / train_total
 
-    return train_loss / batch_idx, train_acc
+    return train_loss / batch_idx, train_acc, domain_snnl_loss_cum / batch_idx, class_snnl_loss_cum / batch_idx
 
 
 def valid(network, valid_loader, conf_matrix=False):
     criterion = nn.CrossEntropyLoss()
     # make validation
+
+    network.eval()
 
     test_loss = 0
     test_correct = 0
@@ -379,4 +381,4 @@ def train_epoch_snnl_dg(network, start_steps, total_steps, train_loader, optimiz
 
     train_acc = 100. * train_correct / train_total
 
-    return train_loss / batch_idx, train_acc
+    return train_loss / batch_idx, train_acc, domain_snnl_loss_cum / batch_idx, class_snnl_loss_cum / batch_idx

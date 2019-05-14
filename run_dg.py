@@ -11,6 +11,7 @@ from networks.networks import resnet18, resnet50
 from train import *
 
 import argparse
+from logger import TensorboardXLogger as Log
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--suffix', default="0", help='The suffix for the name of experiment')
@@ -29,9 +30,11 @@ ROOT = '/home/fcdl/dataset/'
 setting = f"dg-{args.dataset}"
 method = 'dann' if args.revgrad else f'snnl-{args.D}-{args.T}'
 method += f"_{args.suffix}"
-save_name = f"models/{setting}/method.pth"
+save_name = f"models/{setting}/{method}.pth"
 
 if __name__ == '__main__':
+    log = Log(f'logs/{setting}', method)
+
     # Make the dataset
     if args.dataset == 'office':
         source, target = multi.office_home(ROOT, args.sources, args.target)
@@ -84,14 +87,17 @@ if __name__ == '__main__':
         if args.revgrad:
             train_loss, train_acc = train_epoch_dann_dg(net, start_steps, total_steps, train_loader=train_loader,
                                                         optimizer=optimizer)
+            dom_loss, class_loss = 0., 0.
         else:
-            train_loss, train_acc = train_epoch_snnl_dg(net, start_steps, total_steps, train_loader=train_loader,
+            train_loss, train_acc, dom_loss, class_loss = train_epoch_snnl_dg(net, start_steps, total_steps, train_loader=train_loader,
                                                         optimizer=optimizer, t_o=t_o, T_d=T_d, T_c=T_c, ALPHA_D=alpha_d,
                                                         ALPHA_Y=args.Y)
 
         # valid!
         val_loss, val_acc, dom_acc = valid(net, valid_loader=test_loader)
         print(f"Epoch {epoch + 1:03d} : Test Loss {val_loss:.6f}, Test Acc {val_acc:.2f}, Domain Acc {dom_acc:.2f}")
+        log.log_training(epoch, train_loss, train_acc, val_loss, val_acc, dom_loss, class_loss)
+
 
         if val_loss < best_val_loss:
             best_val_loss = val_loss
