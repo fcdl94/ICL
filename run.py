@@ -72,14 +72,15 @@ def get_setting():
                                         transforms.ToTensor(),
                                         normalize])
         # Create data augmentation transform
-        augmentation = transforms.Compose([transforms.RandomResizedCrop(224, (0.6, 1.)),
+        augmentation = transforms.Compose([transforms.Resize(256),
+                                           transforms.RandomResizedCrop(224, (0.6, 1.)),
                                            transforms.RandomHorizontalFlip(),
                                            transform])
 
         source = ImageFolder(paths[args.source], augmentation)
-        target = ImageFolder(paths[args.target], transform)
+        target = ImageFolder(paths[args.target], augmentation)
 
-        test = target
+        test = ImageFolder(paths[args.target], transform) 
         EPOCHS = 60
         n_classes = 65
         net = resnet50(pretrained=True, num_classes=65).to(device)
@@ -172,7 +173,7 @@ if __name__ == '__main__':
             alpha_d = args.D
 
         # train epoch
-        learning_rate = 0.01 / ((1 + 10 * (epoch) / EPOCHS)**0.75)
+        learning_rate = 0.001 / ((1 + 10 * (epoch) / EPOCHS)**0.75)
         optimizer = optim.SGD(net.parameters(), lr=learning_rate, momentum=0.9)
         # scheduler.step()
         print(f"Learning rate: {learning_rate}")

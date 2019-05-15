@@ -34,7 +34,7 @@ class TensorboardXLogger:
                yticks=np.arange(cm.shape[0]),
                # ... and label them with the respective list entries
                xticklabels=classes, yticklabels=classes,
-               title=f'Confusion Matrix {self.iteration}',
+               title=f'Confusion Matrix',
                ylabel='True label',
                xlabel='Predicted label')
 
@@ -62,7 +62,7 @@ class TensorboardXLogger:
         cm = conf.astype('float') / (conf.sum(axis=1)+0.000001)[:, np.newaxis]
 
         fig = self.conf_matrix_figure(cm, np.arange(n_classes))
-        self.writer.add_figure('conf_matrix', fig, self.iteration)
+        self.writer.add_figure('conf_matrix', fig, 0)
 
         avg_acc = np.diag(cm).mean() * 100.
         self.writer.add_scalars('results', {'avg_acc': avg_acc}, self.iteration)
