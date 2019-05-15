@@ -11,6 +11,7 @@ import torch.utils.model_zoo as model_zoo
 from .rev_grad import grad_reverse as GRL
 from .block import *
 from torch.nn import init
+from torchvision import models
 
 model_urls = {
     'resnet18': 'http://download.pytorch.org/models/resnet18-5c106cde.pth',
@@ -23,29 +24,35 @@ model_urls = {
 
 class ResNet(nn.Module):
 
-    def __init__(self, block, layers, num_classes=1000, zero_init_residual=False, dial=False, revgrad=False):
+    def __init__(self, block, layers, pretrained=None, num_classes=1000, zero_init_residual=False, bottleneck=True, bottleneck_dim=256):
         super(ResNet, self).__init__()
         self.inplanes = 64
 
-        self.dial = dial
-        if not dial:
-            self.bn = nn.BatchNorm2d
-        else:
-            self.bn = DAL
+        self.dial = False
+        self.bn = nn.BatchNorm2d
 
-        self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3,
+        self.conv1 = pretrained.conv1 if pretrained is not None else nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3,
                                bias=False)
-        self.bn1 = self.bn(64)
+        self.bn1 = pretrained.bn1 if pretrained is not None else self.bn(64)
         self.relu = nn.ReLU(inplace=True)
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
-        self.layer1 = self._make_layer(block, 64, layers[0])
-        self.layer2 = self._make_layer(block, 128, layers[1], stride=2)
-        self.layer3 = self._make_layer(block, 256, layers[2], stride=2)
-        self.layer4 = self._make_layer(block, 512, layers[3], stride=2)
+        self.layer1 = pretrained.layer1 if pretrained is not None else self._make_layer(block, 64, layers[0])
+        self.layer2 = pretrained.layer2 if pretrained is not None else self._make_layer(block, 128, layers[1], stride=2)
+        self.layer3 = pretrained.layer3 if pretrained is not None else self._make_layer(block, 256, layers[2], stride=2)
+        self.layer4 = pretrained.layer4 if pretrained is not None else self._make_layer(block, 512, layers[3], stride=2)
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
-        self.fc = nn.Linear(512 * block.expansion, num_classes)
 
-        self.domain_discriminator = nn.Sequential(nn.Linear(512 * block.expansion, 1024),
+        n_features_in = 512*block.expansion
+        self.use_bottleneck = False
+
+        if bottleneck:
+            self.use_bottleneck = True
+            self.bottleneck = nn.Linear(n_features_in, bottleneck_dim)
+            n_features_in = bottleneck_dim
+
+        self.fc = nn.Linear(n_features_in, num_classes)
+
+        self.domain_discriminator = nn.Sequential(nn.Linear(n_features_in, 1024),
                                                   nn.ReLU(),
                                                   nn.Linear(1024, 1024),
                                                   nn.ReLU(),
@@ -97,6 +104,9 @@ class ResNet(nn.Module):
 
         x = self.avgpool(x)
         x = x.view(x.size(0), -1)
+
+        if self.use_bottleneck:
+            x = self.bottleneck(x)
 
         return x, x  # here logits and feats are the same! (we classify on only one FC)
 
@@ -384,50 +394,53 @@ def wide_resnet_revgrad(pretrained=None, num_classes=1000):
     return model
 
 
-def resnet18(pretrained=None, num_classes=1000):
+def resnet18(pretrained=None, num_classes=1000, bottleneck=True, bottleneck_dim=256):
     """Constructs a ResNet-18 model.
     Args:
         pretrained (bool): If True, returns a model pre-trained on ImageNet
         num_classes (int): Number of classes of the system
     """
-    model = ResNet(BasicBlock, [2, 2, 2, 2])
     if pretrained is not None:
-        model.load_state_dict(model_zoo.load_url(model_urls['resnet18']), strict=False)
+        pre_model = models.resnet18(model_zoo.load_url(model_urls['resnet18']))
+    else:
+        pre_model = None
 
-    num_ftrs = model.fc.in_features
-    model.fc = nn.Linear(num_ftrs, num_classes)
+    model = ResNet(BasicBlock, [2, 2, 2, 2], pretrained=pre_model,
+                   bottleneck=bottleneck, bottleneck_dim=bottleneck_dim, num_classes=num_classes)
 
     return model
 
 
-def resnet34(pretrained=None, num_classes=1000):
+def resnet34(pretrained=None, num_classes=1000, bottleneck=True, bottleneck_dim=256):
     """Constructs a ResNet-34 model.
     Args:
         pretrained (bool): If True, returns a model pre-trained on ImageNet
         num_classes (int): Number of classes of the system
     """
-    model = ResNet(BasicBlock, [3, 4, 6, 3])
     if pretrained is not None:
-        model.load_state_dict(model_zoo.load_url(model_urls['resnet34']))
+        pre_model = models.resnet34(model_zoo.load_url(model_urls['resnet34']))
+    else:
+        pre_model = None
 
-    num_ftrs = model.fc.in_features
-    model.fc = nn.Linear(num_ftrs, num_classes)
+    model = ResNet(BasicBlock, [3, 4, 6, 3], pretrained=pre_model,
+                   bottleneck=bottleneck, bottleneck_dim=bottleneck_dim, num_classes=num_classes)
 
     return model
 
 
-def resnet50(pretrained=None, num_classes=1000):
+def resnet50(pretrained=None, num_classes=1000, bottleneck=True, bottleneck_dim=256):
     """Constructs a ResNet-50 model.
     Args:
         pretrained (bool): If True, returns a model pre-trained on ImageNet
         num_classes (int): Number of classes of the system
     """
-    model = ResNet(Bottleneck, [3, 4, 6, 3], revgrad=True)
     if pretrained is not None:
-        model.load_state_dict(model_zoo.load_url(model_urls['resnet50']), strict=False)
+        pre_model = models.resnet50(model_zoo.load_url(model_urls['resnet50']))
+    else:
+        pre_model = None
 
-    num_ftrs = model.fc.in_features
-    model.fc = nn.Linear(num_ftrs, num_classes)
+    model = ResNet(Bottleneck, [3, 4, 6, 3], pretrained=pre_model,
+                   bottleneck=bottleneck, bottleneck_dim=bottleneck_dim, num_classes=num_classes)
 
     return model
 
@@ -438,13 +451,4 @@ def resnet50_dial(pretrained=None, num_classes=1000):
         pretrained (bool): If True, returns a model pre-trained on ImageNet
         num_classes (int): Number of classes of the system
     """
-    model = ResNet(Bottleneck, [3, 4, 6, 3], revgrad=True)
-    num_ftrs = model.fc.in_features
-    model.fc = nn.Linear(num_ftrs, num_classes)
-
-    if pretrained is not None:
-        state_dict = torch.load(pretrained)
-        model.load_state_dict(state_dict['network'])
-        print(f"Model pretrained loaded {pretrained}")
-
-    return model
+    raise NotImplementedError
