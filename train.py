@@ -211,7 +211,7 @@ def train_epoch_snnl(network, start_steps, total_steps, train_loader, optimizer,
     return train_loss / batch_idx, train_acc, domain_snnl_loss_cum / batch_idx, class_snnl_loss_cum / batch_idx
 
 
-def valid(network, valid_loader, conf_matrix=False):
+def valid(network, valid_loader, conf_matrix=False, log=None, n_classes=None):
     criterion = nn.CrossEntropyLoss()
     # make validation
 
@@ -250,6 +250,9 @@ def valid(network, valid_loader, conf_matrix=False):
     test_acc = 100. * test_correct / test_total
     domain_acc = 100. * domain_acc / test_total
     test_loss /= len(valid_loader)
+
+    if conf_matrix:
+        log.confusion_matrix(torch.cat(targets_cum), torch.cat(predict_cum), n_classes)
 
     return test_loss, test_acc, domain_acc
 

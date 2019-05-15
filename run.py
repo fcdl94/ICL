@@ -38,8 +38,10 @@ save_name = f"models/{setting}/{method}.pth"
 
 os.makedirs(f"models/{setting}/", exist_ok=True)
 
-def get_setting():
+n_classes = 0
 
+def get_setting():
+    global n_classes
     if args.dataset == 'mnist':
         transform = tv.transforms.Compose([transforms.Resize((28, 28)),
                                            transforms.ToTensor(),
@@ -54,6 +56,7 @@ def get_setting():
         EPOCHS = 40
         net = lenet_net().to(device)
         batch_size = 128
+        n_classes = 10
     elif args.dataset == 'office':
         from networks.networks import resnet50
         paths = {"p": ROOT + "office/Product",
@@ -78,6 +81,7 @@ def get_setting():
 
         test = target
         EPOCHS = 60
+        n_classes = 65
         net = resnet50(pretrained=True, num_classes=65).to(device)
         batch_size = 32
     else:
@@ -97,6 +101,7 @@ def get_setting():
                                        transform]))
         EPOCHS = 150
         batch_size = 128
+        n_classes = 10
         net = svhn_net().to(device)
 
     # target_loader = DataLoader(target, batch_size=batch_size, shuffle=True, num_workers=8)
@@ -194,6 +199,7 @@ if __name__ == '__main__':
             best_epoch = epoch
             best_model = torch.save(net.state_dict(),  save_name)
 
+    val_loss, val_acc, dom_acc = valid(net, valid_loader=test_loader, conf_matrix=True, log=log, n_classes=n_classes)
     with open('results.csv', 'a') as file:
         file.write(f"{datetime.datetime.now().strftime('%Y-%m-%d-%H-%M')},{setting},{method},{EPOCHS},{val_loss},{val_acc},{best_epoch},{best_val_loss},{best_val_acc}\n")
 
