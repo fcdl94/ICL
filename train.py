@@ -65,7 +65,8 @@ def train_epoch_dann(network, start_steps, total_steps, train_loader, optimizer,
 
         # sum the losses and do backward propagation
         loss_dom = (loss_bx_dom_s + loss_bx_dom_t)
-        loss_bx = loss_bx_src + loss_bx_tar + ALPHA * loss_dom  # use target labels
+        loss_cl = loss_bx_src + loss_bx_tar
+        loss_bx = loss_cl + ALPHA * loss_dom  # use target labels
 
         loss_bx.backward()
         optimizer.step()
@@ -75,7 +76,7 @@ def train_epoch_dann(network, start_steps, total_steps, train_loader, optimizer,
         tr_crc = predicted.eq(targets).sum().item()  # only on target
 
         # compute statistics
-        train_loss += loss_bx.item()
+        train_loss += loss_cl.item()
         train_total += tr_tot
         train_correct += tr_crc
 
@@ -95,7 +96,7 @@ def train_epoch_dann(network, start_steps, total_steps, train_loader, optimizer,
                   f"TarDom Acc : {torch.sigmoid(d_prediction.detach()).cpu().mean().item():.3f}"
                   )
 
-    train_acc = 100. * train_correct / train_total
+    train_acc = 100. * train_correct_src / train_total_src
 
     return train_loss / batch_idx, train_acc
 
