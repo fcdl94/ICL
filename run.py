@@ -35,13 +35,20 @@ assert not (args.revgrad and args.so), "Please, use only one between Revgrad and
 device = 'cuda'
 ROOT = '/home/fcdl/dataset/'
 setting = f"{'uda' if args.uda else 'mixed'}-{args.dataset}/{args.source}-{args.target}"
-method = 'dann' if args.revgrad else f'snnl-d{args.D:.1f}-t{args.T:.1f}'
-method += f"_{args.suffix}"
-save_name = f"models/{setting}/{method}.pth"
 
+if args.revgrad:
+    method = 'dann'
+elif args.so:
+    method = "SO"
+else:
+    method = f'snnl-d{args.D:.1f}-t{args.T:.1f}'
+method += f"_{args.suffix}"
+
+save_name = f"models/{setting}/{method}.pth"
 os.makedirs(f"models/{setting}/", exist_ok=True)
 
 n_classes = 0
+
 
 def get_setting():
     global n_classes
@@ -87,7 +94,7 @@ def get_setting():
         EPOCHS = 60
         n_classes = 65
         net = resnet50(pretrained=True, num_classes=65).to(device)
-        batch_size = 32
+        batch_size = 64
     else:
         transform = tv.transforms.Compose([transforms.Resize((28, 28)),
                                            transforms.ToTensor(),
@@ -187,7 +194,7 @@ if __name__ == '__main__':
             dom_loss, class_loss = 0., 0.
         elif args.so:
             train_loss, train_acc = train_epoch_single(net, start_steps, total_steps, train_loader=train_loader,
-                                                     optimizer=optimizer, use_target_labels=use_target_labels)
+                                                     optimizer=optimizer)
             dom_loss, class_loss = 0., 0.
         else:
             train_loss, train_acc, dom_loss, class_loss = train_epoch_snnl(net, start_steps, total_steps, train_loader=train_loader,

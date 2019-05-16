@@ -37,7 +37,7 @@ def init_weights(m):
 
 class ResNet(nn.Module):
 
-    def __init__(self, block, layers, pretrained=None, num_classes=1000, zero_init_residual=False, bottleneck=True, bottleneck_dim=256):
+    def __init__(self, block, layers, pretrained=None, num_classes=1000, zero_init_residual=False, branch_dim=256):
         super(ResNet, self).__init__()
         self.inplanes = 64
 
@@ -56,22 +56,16 @@ class ResNet(nn.Module):
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
 
         n_features_in = 512*block.expansion
-        self.use_bottleneck = False
 
-        if bottleneck:
-            self.use_bottleneck = True
-            self.bottleneck = nn.Linear(n_features_in, bottleneck_dim)
-            n_features_in = bottleneck_dim
-
+        self.branch = nn.Linear(n_features_in, branch_dim)
         self.fc = nn.Linear(n_features_in, num_classes)
-
         self.domain_discriminator = nn.Sequential(nn.Linear(n_features_in, 1024),
                                                   nn.ReLU(),
                                                   nn.Linear(1024, 1024),
                                                   nn.ReLU(),
                                                   nn.Linear(1024, 1))
 
-        self.bottleneck.apply(init_weights)
+        self.branch.apply(init_weights)
         self.fc.apply(init_weights)
         self.domain_discriminator.apply(init_weights)
 
@@ -121,12 +115,11 @@ class ResNet(nn.Module):
         x = self.layer4(x)
 
         x = self.avgpool(x)
-        x = x.view(x.size(0), -1)
+        feat = x.view(x.size(0), -1)
 
-        if self.use_bottleneck:
-            x = self.bottleneck(x)
+        branch = self.branch(feat)
 
-        return x, x  # here logits and feats are the same! (we classify on only one FC)
+        return feat, branch  # here logits and feats are the same! (we classify on only one FC)
 
     def predict(self, x):
         x = self.fc(x)
