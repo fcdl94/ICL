@@ -32,8 +32,8 @@ def train_epoch_dann(network, start_steps, total_steps, train_loader, optimizer,
         targets = targets.to(device)  # ground truth class scores
         domains = torch.zeros(inputs.shape[0], 1).to(device)  # source is index 0
 
-        logits, feat = network.forward(inputs)  # feature vector only
-        prediction = network.predict(logits)  # class scores
+        feat, branch = network.forward(inputs)  # feature vector only
+        prediction = network.predict(feat)  # class scores
         s_prediction, _ = network.discriminate_domain(feat, lam)  # domain score
 
         loss_bx_src = src_criterion(prediction, targets)  # CE loss
@@ -52,8 +52,8 @@ def train_epoch_dann(network, start_steps, total_steps, train_loader, optimizer,
         inputs, targets = inputs.to(device), targets.to(device)  # class gt
         domains = torch.ones(inputs.shape[0], 1).to(device)  # target is index 1
 
-        logits, feat = network.forward(inputs)  # feature vector only
-        prediction = network.predict(logits)  # class scores
+        feat, branch = network.forward(inputs)  # feature vector only
+        prediction = network.predict(feat)  # class scores
         d_prediction, _ = network.discriminate_domain(feat, lam)  # domain score
 
         if use_target_labels:
@@ -130,9 +130,8 @@ def train_epoch_snnl(network, start_steps, total_steps, train_loader, optimizer,
         targets_s = targets_s.to(device)  # ground truth class scores
         domain_s = torch.zeros(inputs_s.shape[0]).to(device)  # source is index 0
 
-        logit_s, feat_s = network.forward(inputs_s)  # feature vector only
-        prediction = network.predict(logit_s)  # class scores
-        # d_prediction_s = network.discriminate_domain(feat_s)  # domain score
+        feat_s, branch_s = network.forward(inputs_s)  # feature vector only
+        prediction = network.predict(feat_s)  # class scores
 
         loss_bx_src = src_criterion(prediction, targets_s)  # CE loss
 
@@ -149,8 +148,8 @@ def train_epoch_snnl(network, start_steps, total_steps, train_loader, optimizer,
         inputs_t, targets_t = inputs_t.to(device), targets_t.to(device)  # class gt
         domain_t = torch.ones(inputs_t.shape[0]).to(device)  # target is index 1
 
-        logit_t, feat_t = network.forward(inputs_t)  # feature vector only
-        prediction = network.predict(logit_t)  # class scores
+        feat_t, branch_t = network.forward(inputs_t)  # feature vector only
+        prediction = network.predict(feat_t)  # class scores
         # d_prediction_t = network.discriminate_domain(feat_t)  # domain score
 
         if use_target_labels:
@@ -166,13 +165,14 @@ def train_epoch_snnl(network, start_steps, total_steps, train_loader, optimizer,
         loss_cl = (loss_bx_src + loss_bx_tar)
 
         # logits = torch.cat((logit_s, logit_t), 0)
-        feats = torch.cat((feat_s, feat_t), 0)
+        # feats = torch.cat((feat_s, feat_t), 0)
+        branchs = torch.cat((branch_s, branch_t), 0)
         # d_prediction = torch.cat((d_prediction_s, d_prediction_t), 0)
         # targets = torch.cat((targets_s, targets_t), 0)
         domains = torch.cat((domain_s, domain_t), 0)
 
         class_snnl_loss = snnl(feat_s, targets_s, T_c)
-        domain_snnl_loss = snnl_inv(feats, domains, T_d)
+        domain_snnl_loss = snnl_inv(branchs, domains, T_d)
 
         loss = loss_cl + lam * ALPHA_D * domain_snnl_loss + ALPHA_Y * class_snnl_loss
 
@@ -229,8 +229,8 @@ def train_epoch_single(network, start_steps, total_steps, train_loader, optimize
         inputs_s = inputs_s.to(device)
         targets_s = targets_s.to(device)  # ground truth class scores
 
-        logit_s, feat_s = network.forward(inputs_s)  # feature vector only
-        prediction = network.predict(logit_s)  # class scores
+        feat, _ = network.forward(inputs_s)  # feature vector only
+        prediction = network.predict(feat)  # class scores
         # d_prediction_s = network.discriminate_domain(feat_s)  # domain score
 
         loss_bx_src = src_criterion(prediction, targets_s)  # CE loss
@@ -283,9 +283,8 @@ def valid(network, valid_loader, conf_matrix=False, log=None, n_classes=None):
             inputs = inputs.to(device)
             targets = targets.to(device)
 
-            outputs, feats = network.forward(inputs)
-            predictions = network.predict(outputs)  # class score
-            domains, _ = network.discriminate_domain(feats, 0)  # domain score (correct if 1., 0.5 is wanted)
+            feats, branch = network.forward(inputs)
+            predictions = network.predict(feats)  # class score
 
             loss_bx = criterion(predictions, targets)
 
@@ -297,17 +296,15 @@ def valid(network, valid_loader, conf_matrix=False, log=None, n_classes=None):
             targets_cum.append(targets)
             predict_cum.append(predicted)
 
-            domain_acc += torch.sigmoid(domains.cpu().detach()).sum().item()
 
     # normalize and print stats
     test_acc = 100. * test_correct / test_total
-    domain_acc = 100. * domain_acc / test_total
     test_loss /= len(valid_loader)
 
     if conf_matrix:
         log.confusion_matrix(torch.cat(targets_cum), torch.cat(predict_cum), n_classes)
 
-    return test_loss, test_acc, domain_acc
+    return test_loss, test_acc
 
 
 def train_epoch_dann_dg(network, start_steps, total_steps, train_loader, optimizer, ALPHA=1, use_target_labels=True):

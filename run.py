@@ -204,8 +204,8 @@ if __name__ == '__main__':
 
 
         # valid!
-        val_loss, val_acc, dom_acc = valid(net, valid_loader=test_loader)
-        print(f"Epoch {epoch + 1:03d} : Test Loss {val_loss:.6f}, Test Acc {val_acc:.2f}, Domain Acc {dom_acc:.2f}")
+        val_loss, val_acc = valid(net, valid_loader=test_loader)
+        print(f"Epoch {epoch + 1:03d} : Test Loss {val_loss:.6f}, Test Acc {val_acc:.2f}")
 
         log.log_training(epoch, train_loss, train_acc, val_loss, val_acc, dom_loss, class_loss)
 
