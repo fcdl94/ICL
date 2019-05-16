@@ -62,9 +62,8 @@ class TensorboardXLogger:
         cm = conf.astype('float') / (conf.sum(axis=1)+0.000001)[:, np.newaxis]
 
         fig = self.conf_matrix_figure(cm, np.arange(n_classes))
-        self.writer.add_figure('conf_matrix', fig, 0)
+        self.writer.add_figure('conf_matrix', fig, close=True)
 
         avg_acc = np.diag(cm).mean() * 100.
-        self.writer.add_scalars('results', {'avg_acc': avg_acc}, self.iteration)
-        logging.info(f"Per class accuracy: {avg_acc}")
+        print(f"Per class accuracy: {avg_acc}")
         return conf

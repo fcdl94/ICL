@@ -54,7 +54,7 @@ class SNNLoss(nn.Module):
             den = den.clone()
             den[torch.isinf(num)] = 0
             num[torch.isinf(num)] = 0
-            print(torch.bincount(y))
+            #print(torch.bincount(y))
 
         if torch.sum(torch.isnan(num)) > 0:
             print(x.shape)
