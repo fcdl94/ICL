@@ -405,7 +405,7 @@ def wide_resnet_revgrad(pretrained=None, num_classes=1000):
     return model
 
 
-def resnet18(pretrained=None, num_classes=1000, bottleneck=True, bottleneck_dim=256):
+def resnet18(pretrained=None, num_classes=1000):
     """Constructs a ResNet-18 model.
     Args:
         pretrained (bool): If True, returns a model pre-trained on ImageNet
@@ -416,13 +416,12 @@ def resnet18(pretrained=None, num_classes=1000, bottleneck=True, bottleneck_dim=
     else:
         pre_model = None
 
-    model = ResNet(BasicBlock, [2, 2, 2, 2], pretrained=pre_model,
-                   bottleneck=bottleneck, bottleneck_dim=bottleneck_dim, num_classes=num_classes)
+    model = ResNet(BasicBlock, [2, 2, 2, 2], pretrained=pre_model, num_classes=num_classes)
 
     return model
 
 
-def resnet34(pretrained=None, num_classes=1000, bottleneck=True, bottleneck_dim=256):
+def resnet34(pretrained=None, num_classes=1000):
     """Constructs a ResNet-34 model.
     Args:
         pretrained (bool): If True, returns a model pre-trained on ImageNet
@@ -433,13 +432,12 @@ def resnet34(pretrained=None, num_classes=1000, bottleneck=True, bottleneck_dim=
     else:
         pre_model = None
 
-    model = ResNet(BasicBlock, [3, 4, 6, 3], pretrained=pre_model,
-                   bottleneck=bottleneck, bottleneck_dim=bottleneck_dim, num_classes=num_classes)
+    model = ResNet(BasicBlock, [3, 4, 6, 3], pretrained=pre_model, num_classes=num_classes)
 
     return model
 
 
-def resnet50(pretrained=None, num_classes=1000, bottleneck=True, bottleneck_dim=256):
+def resnet50(pretrained=None, num_classes=1000):
     """Constructs a ResNet-50 model.
     Args:
         pretrained (bool): If True, returns a model pre-trained on ImageNet
@@ -450,8 +448,7 @@ def resnet50(pretrained=None, num_classes=1000, bottleneck=True, bottleneck_dim=
     else:
         pre_model = None
 
-    model = ResNet(Bottleneck, [3, 4, 6, 3], pretrained=pre_model,
-                   bottleneck=bottleneck, bottleneck_dim=bottleneck_dim, num_classes=num_classes)
+    model = ResNet(Bottleneck, [3, 4, 6, 3], pretrained=pre_model, num_classes=num_classes)
 
     return model
 
