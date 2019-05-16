@@ -13,6 +13,7 @@ from train import *
 from logger import TensorboardXLogger as Log
 import os
 import argparse
+import local_path
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--suffix', default="0", help='The suffix for the name of experiment')
@@ -33,7 +34,7 @@ assert not (args.revgrad and args.so), "Please, use only one between Revgrad and
 
 # parameters and utils
 device = 'cuda'
-ROOT = '/home/fcdl/dataset/'
+ROOT = local_path.ROOT
 setting = f"{'uda' if args.uda else 'mixed'}-{args.dataset}/{args.source}-{args.target}"
 
 if args.revgrad:
