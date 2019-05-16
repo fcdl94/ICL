@@ -22,11 +22,14 @@ parser.add_argument('-T', default=0, type=float)
 parser.add_argument('--revgrad', action='store_true')
 parser.add_argument('--dataset', default="mnist")
 parser.add_argument('--uda', action='store_true')
+parser.add_argument('--so', action='store_true')
 parser.add_argument('-s', '--source', default="p")
 parser.add_argument('-t', '--target', default="r")
 parser.add_argument('--start_epoch', default=0, type=int)
 
 args = parser.parse_args()
+
+assert not (args.revgrad and args.so), "Please, use only one between Revgrad and SO"
 
 # parameters and utils
 device = 'cuda'
@@ -180,6 +183,10 @@ if __name__ == '__main__':
 
         if args.revgrad:
             train_loss, train_acc = train_epoch_dann(net, start_steps, total_steps, train_loader=train_loader,
+                                                     optimizer=optimizer, use_target_labels=use_target_labels)
+            dom_loss, class_loss = 0., 0.
+        elif args.so:
+            train_loss, train_acc = train_epoch_single(net, start_steps, total_steps, train_loader=train_loader,
                                                      optimizer=optimizer, use_target_labels=use_target_labels)
             dom_loss, class_loss = 0., 0.
         else:

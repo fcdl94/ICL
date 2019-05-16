@@ -211,6 +211,58 @@ def train_epoch_snnl(network, start_steps, total_steps, train_loader, optimizer,
 
     return train_loss / batch_idx, train_acc, domain_snnl_loss_cum / batch_idx, class_snnl_loss_cum / batch_idx
 
+def train_epoch_single(network, start_steps, total_steps, train_loader, optimizer):
+    src_criterion = nn.CrossEntropyLoss()
+
+    network.train()
+    train_loss = 0
+    train_correct = 0
+    train_total = 0
+    batch_idx = 0
+
+    for source_batch, target_batch in train_loader:
+
+        optimizer.zero_grad()
+
+        inputs_s, targets_s = source_batch
+
+        inputs_s = inputs_s.to(device)
+        targets_s = targets_s.to(device)  # ground truth class scores
+
+        logit_s, feat_s = network.forward(inputs_s)  # feature vector only
+        prediction = network.predict(logit_s)  # class scores
+        # d_prediction_s = network.discriminate_domain(feat_s)  # domain score
+
+        loss_bx_src = src_criterion(prediction, targets_s)  # CE loss
+
+        _, predicted = prediction.max(1)
+        tr_tot = targets_s.size(0)  # only on target
+        tr_crc = predicted.eq(targets_s).sum().item()  # only on target
+
+        train_total += tr_tot
+        train_correct += tr_crc
+
+        # sum the CE losses
+        loss = loss_bx_src
+
+        loss.backward()
+        optimizer.step()
+
+        # compute statistics
+        train_loss += loss_bx_src.item()
+        train_total += tr_tot
+        train_correct += tr_crc
+
+        batch_idx += 1
+        if batch_idx % 200 == 0 or batch_idx == 1:
+            print(f"Batch {batch_idx} / {len(train_loader)}\n\t"
+                  f"Source Loss: {loss_bx_src:.6f} "
+                  f"Source Acc : {100.0 * train_correct / train_total:.2f} ")
+
+    train_acc = 100. * train_correct / train_total
+
+    return train_loss / batch_idx, train_acc
+
 
 def valid(network, valid_loader, conf_matrix=False, log=None, n_classes=None):
     criterion = nn.CrossEntropyLoss()
